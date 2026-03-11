@@ -373,682 +373,366 @@
     </p>
   </div>
 
-  <script>
-    (() => {
-      "use strict";
+ <script>
+  const STORAGE_KEY = 'speechPracticeEducation_v9';
+  const AUDIO_DB_NAME = 'speechPracticeEducationAudioDB';
+  const AUDIO_STORE_NAME = 'audioRecordings';
+  const AUDIO_DB_VERSION = 1;
 
-      // ===== Elements =====
-      const scriptText = document.getElementById("scriptText");
-      const scriptStats = document.getElementById("scriptStats");
-      const clearScriptBtn = document.getElementById("clearScriptBtn");
-      const downloadScriptBtn = document.getElementById("downloadScriptBtn");
+  const APP_HEARTBEAT_INTERVAL_MS = 5000;
 
-      const ttsLang = document.getElementById("ttsLang");
-      const voiceSelect = document.getElementById("voiceSelect");
-      const loopRead = document.getElementById("loopRead");
-      const rateRange = document.getElementById("rateRange");
-      const pitchRange = document.getElementById("pitchRange");
-      const volumeRange = document.getElementById("volumeRange");
-      const rateValue = document.getElementById("rateValue");
-      const pitchValue = document.getElementById("pitchValue");
-      const volumeValue = document.getElementById("volumeValue");
-      const speakBtn = document.getElementById("speakBtn");
-      const pauseBtn = document.getElementById("pauseBtn");
-      const resumeBtn = document.getElementById("resumeBtn");
-      const stopSpeakBtn = document.getElementById("stopSpeakBtn");
+  let timeLimit = 60;
+  let timeLeft = 60;
+  let isRecording = false;
+  let recordings = [];
+  let finalTranscript = '';
+  let interimTranscript = '';
 
-      const recognitionLangEl = document.getElementById("recognitionLang");
-      const appendMode = document.getElementById("appendMode");
-      const startBtn = document.getElementById("startBtn");
-      const stopBtn = document.getElementById("stopBtn");
-      const downloadBtn = document.getElementById("downloadBtn");
-      const audioPlayer = document.getElementById("audioPlayer");
-      const transcriptEl = document.getElementById("transcript");
-      const transcriptStats = document.getElementById("transcriptStats");
-      const clearTranscriptBtn = document.getElementById("clearTranscriptBtn");
-      const downloadTranscriptBtn = document.getElementById("downloadTranscriptBtn");
-      const statusEl = document.getElementById("status");
+  let timerInterval = null;
+  let mediaRecorder = null;
+  let recognition = null;
+  let globalAudioStream = null;
 
-      // ===== Utility =====
-      function setStatus(message) {
-        statusEl.textContent = message;
-        console.log("[SpeechPractice]", message);
-      }
+  let recordingStartTime = null;
+  let lastSessionDuration = 0;
+  let latestAudioUrl = null;
+  let pendingAudioUrl = null;
+  let pendingAudioBlob = null;
+  let latestReviewAudioBlob = null;
+  let audioChunks = [];
+  let latestDraftRecording = null;
+  let recordingMimeType = '';
+  let isAudioRecordingEnabledThisSession = false;
+  let recognitionRestartEnabled = false;
 
-      function countWords(text) {
-        const trimmed = text.trim();
-        if (!trimmed) return 0;
-        return trimmed.split(/\s+/).length;
-      }
+  let stopRequested = false;
+  let reviewFinalized = false;
+  let finalizeTimer = null;
+  let pendingReady = { audio: false, recognition: false };
+  let renderedAudioUrls = [];
+  let isAppClosing = false;
+  let appHeartbeatTimer = null;
 
-      function updateScriptStats() {
-        const text = scriptText.value || "";
-        scriptStats.textContent = `文字数: ${text.length} / 語数: ${countWords(text)}`;
-      }
+  const CIRCLE_RADIUS = 88;
+  const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
-      function updateTranscriptStats() {
-        const text = transcriptEl.value || "";
-        transcriptStats.textContent = `文字数: ${text.length} / 語数: ${countWords(text)}`;
-      }
+  const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  const hasGetUserMediaSupport = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const hasMediaRecorderSupport = typeof window.MediaRecorder !== 'undefined';
 
-      function downloadTextFile(filename, content) {
-        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      }
+  // DOM
+  const timeSelect = document.getElementById('time-select');
+  const targetWordsInput = document.getElementById('target-words');
+  const langSelect = document.getElementById('lang-select');
+  const studentNameInput = document.getElementById('student-name');
+  const speechTopicInput = document.getElementById('speech-topic');
 
-      function isSecureEnough() {
-        return (
-          window.isSecureContext ||
-          location.hostname === "localhost" ||
-          location.hostname === "127.0.0.1"
-        );
-      }
+  const timerText = document.getElementById('timer-text');
+  const timerCircle = document.getElementById('timer-circle');
+  const recordingIndicator = document.getElementById('recording-indicator');
 
-      function isMobileLike() {
-        return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      }
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const resetLiveBtn = document.getElementById('reset-live-btn');
+  const copyBtn = document.getElementById('copy-btn');
+  const downloadBtn = document.getElementById('download-btn');
+  const clearHistoryBtn = document.getElementById('clear-history-btn');
+  const exportCsvBtn = document.getElementById('export-csv-btn');
+  const exportJsonBtn = document.getElementById('export-json-btn');
+  const importJsonInput = document.getElementById('import-json-input');
+  const saveReviewBtn = document.getElementById('save-review-btn');
+  const discardLatestBtn = document.getElementById('discard-latest-btn');
 
-      // ===== Script buttons =====
-      scriptText.addEventListener("input", updateScriptStats);
-      transcriptEl.addEventListener("input", updateTranscriptStats);
+  const errorContainer = document.getElementById('error-container');
+  const errorText = document.getElementById('error-text');
+  const micStatus = document.getElementById('mic-status');
+  const liveTranscriptText = document.getElementById('live-transcript-text');
 
-      clearScriptBtn.addEventListener("click", () => {
-        scriptText.value = "";
-        updateScriptStats();
-        setStatus("Script cleared.");
-      });
+  const emptyState = document.getElementById('empty-state');
+  const recordingsList = document.getElementById('recordings-list');
 
-      downloadScriptBtn.addEventListener("click", () => {
-        downloadTextFile("speechpractice-script.txt", scriptText.value || "");
-        setStatus("Script downloaded.");
-      });
+  const wordCountEl = document.getElementById('word-count');
+  const wpmCountEl = document.getElementById('wpm-count');
+  const targetDisplayEl = document.getElementById('target-display');
+  const targetProgressLabel = document.getElementById('target-progress-label');
+  const targetProgressBar = document.getElementById('target-progress-bar');
+  const savedCountEl = document.getElementById('saved-count');
 
-      clearTranscriptBtn.addEventListener("click", () => {
-        transcriptEl.value = "";
-        updateTranscriptStats();
-        setStatus("Transcript cleared.");
-      });
+  const searchInput = document.getElementById('search-input');
+  const sortSelect = document.getElementById('sort-select');
 
-      downloadTranscriptBtn.addEventListener("click", () => {
-        downloadTextFile("speechpractice-transcript.txt", transcriptEl.value || "");
-        setStatus("Transcript downloaded.");
-      });
+  const scoreContent = document.getElementById('score-content');
+  const scoreFluency = document.getElementById('score-fluency');
+  const scorePronunciation = document.getElementById('score-pronunciation');
+  const scoreVocabulary = document.getElementById('score-vocabulary');
+  const scoreGrammar = document.getElementById('score-grammar');
+  const totalScoreEl = document.getElementById('total-score');
+  const reflectionNote = document.getElementById('reflection-note');
 
-      updateScriptStats();
-      updateTranscriptStats();
+  const latestReviewContainer = document.getElementById('latest-review-container');
+  const latestAudioPlayer = document.getElementById('latest-audio-player');
+  const latestReviewText = document.getElementById('latest-review-text');
+  const latestReviewMeta = document.getElementById('latest-review-meta');
 
-      // ===== Text to Speech =====
-      let voices = [];
-      let currentUtterance = null;
-      let loopEnabled = false;
-      let manualSpeechStop = false;
+  timerCircle.style.strokeDasharray = CIRCUMFERENCE;
+  timerCircle.style.strokeDashoffset = 0;
+  lucide.createIcons();
 
-      function refreshSliderLabels() {
-        rateValue.textContent = Number(rateRange.value).toFixed(1);
-        pitchValue.textContent = Number(pitchRange.value).toFixed(1);
-        volumeValue.textContent = Number(volumeRange.value).toFixed(1);
-      }
+  function isSecureEnough() {
+    return window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  }
 
-      refreshSliderLabels();
-      rateRange.addEventListener("input", refreshSliderLabels);
-      pitchRange.addEventListener("input", refreshSliderLabels);
-      volumeRange.addEventListener("input", refreshSliderLabels);
+  function isMobileLike() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
 
-      function getLanguagePrefix(lang) {
-        return (lang || "en-US").split("-")[0];
-      }
+  function streamHasLiveTracks(stream) {
+    return !!stream && stream.getAudioTracks().some(track => track.readyState === 'live');
+  }
 
-      function populateVoices() {
-        voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-        const currentLang = ttsLang.value;
-        const prevValue = voiceSelect.value;
+  function chooseSupportedMimeType() {
+    if (!hasMediaRecorderSupport) return '';
 
-        voiceSelect.innerHTML = "";
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4',
+      'audio/ogg;codecs=opus',
+      'audio/ogg'
+    ];
 
-        let filtered = voices.filter(v => (v.lang || "").toLowerCase() === currentLang.toLowerCase());
-
-        if (!filtered.length) {
-          filtered = voices.filter(v => (v.lang || "").toLowerCase().startsWith(getLanguagePrefix(currentLang).toLowerCase()));
+    for (const type of candidates) {
+      try {
+        if (MediaRecorder.isTypeSupported(type)) {
+          return type;
         }
+      } catch (e) {}
+    }
 
-        if (!filtered.length) {
-          filtered = voices.slice();
+    return '';
+  }
+
+  function getCurrentTranscript() {
+    return `${finalTranscript} ${interimTranscript}`.replace(/\s+/g, ' ').trim();
+  }
+
+  function normalizeAudioId(id) {
+    return String(id ?? '').trim();
+  }
+
+  function getPossibleAudioKeys(id) {
+    const normalized = normalizeAudioId(id);
+    const keys = [normalized];
+
+    if (/^\d+$/.test(normalized)) {
+      const numericKey = Number(normalized);
+      if (String(numericKey) === normalized) {
+        keys.push(numericKey);
+      }
+    }
+
+    return keys;
+  }
+
+  function getAudioExtensionFromMimeType(mimeType = '') {
+    const t = String(mimeType || '').toLowerCase();
+    if (t.includes('webm')) return 'weba';
+    if (t.includes('mp4')) return 'm4a';
+    if (t.includes('mpeg') || t.includes('mp3')) return 'mp3';
+    if (t.includes('wav')) return 'wav';
+    if (t.includes('ogg')) return 'ogg';
+    return 'weba';
+  }
+
+  function escapeHtml(str = '') {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function clearRenderedAudioUrls() {
+    renderedAudioUrls.forEach(url => URL.revokeObjectURL(url));
+    renderedAudioUrls = [];
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const [meta, base64] = dataUrl.split(',');
+    const mimeMatch = meta.match(/data:(.*?);base64/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    return new Blob([bytes], { type: mime });
+  }
+
+  function postLauncherSignal(path, useBeacon = false) {
+    if (!path) return;
+    if (!(location.protocol === 'http:' || location.protocol === 'https:')) return;
+
+    try {
+      if (useBeacon && navigator.sendBeacon) {
+        const ok = navigator.sendBeacon(path, '1');
+        if (ok) return;
+      }
+
+      fetch(path, {
+        method: 'POST',
+        body: '1',
+        keepalive: true,
+        cache: 'no-store',
+        headers: { 'Content-Type': 'text/plain' }
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
+  function startAppHeartbeat() {
+    if (!(location.protocol === 'http:' || location.protocol === 'https:')) return;
+
+    stopAppHeartbeat();
+    postLauncherSignal('/__ping__');
+
+    appHeartbeatTimer = setInterval(() => {
+      if (isAppClosing) return;
+      postLauncherSignal('/__ping__');
+    }, APP_HEARTBEAT_INTERVAL_MS);
+  }
+
+  function stopAppHeartbeat() {
+    if (appHeartbeatTimer) {
+      clearInterval(appHeartbeatTimer);
+      appHeartbeatTimer = null;
+    }
+  }
+
+  function openAudioDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(AUDIO_DB_NAME, AUDIO_DB_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(AUDIO_STORE_NAME)) {
+          db.createObjectStore(AUDIO_STORE_NAME, { keyPath: 'id' });
         }
+      };
 
-        if (!filtered.length) {
-          const opt = document.createElement("option");
-          opt.value = "";
-          opt.textContent = "No voices found";
-          voiceSelect.appendChild(opt);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function saveAudioBlob(id, blob) {
+    if (!blob) return;
+
+    const key = normalizeAudioId(id);
+    const db = await openAudioDb();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(AUDIO_STORE_NAME);
+
+      store.put({
+        id: key,
+        blob,
+        mimeType: blob.type || 'audio/webm',
+        savedAt: new Date().toISOString()
+      });
+
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error);
+      };
+    });
+  }
+
+  async function getAudioEntry(id) {
+    const keys = getPossibleAudioKeys(id);
+    const db = await openAudioDb();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE_NAME, 'readonly');
+      const store = tx.objectStore(AUDIO_STORE_NAME);
+      let index = 0;
+
+      const tryNext = () => {
+        if (index >= keys.length) {
+          db.close();
+          resolve(null);
           return;
         }
 
-        filtered.forEach((voice, idx) => {
-          const opt = document.createElement("option");
-          opt.value = voice.name;
-          opt.textContent = `${voice.name} (${voice.lang})`;
-          if (voice.default) {
-            opt.textContent += " [default]";
-          }
-          if (voice.name === prevValue) {
-            opt.selected = true;
-          }
-          voiceSelect.appendChild(opt);
-        });
+        const request = store.get(keys[index]);
+        index += 1;
 
-        if (!voiceSelect.value && filtered[0]) {
-          voiceSelect.value = filtered[0].name;
-        }
-      }
-
-      function getSelectedVoice() {
-        const name = voiceSelect.value;
-        return voices.find(v => v.name === name) || null;
-      }
-
-      function stopSpeech() {
-        manualSpeechStop = true;
-        loopEnabled = false;
-        if (window.speechSynthesis) {
-          speechSynthesis.cancel();
-        }
-        currentUtterance = null;
-      }
-
-      function startSpeech() {
-        const text = (scriptText.value || "").trim();
-        if (!text) {
-          setStatus("Script が空です。読み上げる文章を入力してください。");
-          return;
-        }
-
-        if (!("speechSynthesis" in window)) {
-          setStatus("このブラウザでは読み上げに対応していません。");
-          return;
-        }
-
-        stopSpeech();
-        manualSpeechStop = false;
-        loopEnabled = loopRead.value === "loop";
-
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = ttsLang.value;
-        utter.rate = Number(rateRange.value);
-        utter.pitch = Number(pitchRange.value);
-        utter.volume = Number(volumeRange.value);
-
-        const selectedVoice = getSelectedVoice();
-        if (selectedVoice) {
-          utter.voice = selectedVoice;
-        }
-
-        utter.onstart = () => {
-          setStatus("読み上げ中です。");
-        };
-
-        utter.onend = () => {
-          currentUtterance = null;
-          if (loopEnabled && !manualSpeechStop) {
-            setTimeout(() => {
-              if (!manualSpeechStop) {
-                startSpeech();
-              }
-            }, 250);
+        request.onsuccess = () => {
+          if (request.result) {
+            db.close();
+            resolve(request.result);
           } else {
-            setStatus("読み上げが終了しました。");
+            tryNext();
           }
         };
 
-        utter.onerror = (e) => {
-          currentUtterance = null;
-          setStatus(`読み上げエラー: ${e.error || "unknown"}`);
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
         };
+      };
 
-        currentUtterance = utter;
-        speechSynthesis.speak(utter);
+      tryNext();
+    });
+  }
+
+  async function getAudioBlob(id) {
+    const entry = await getAudioEntry(id);
+    return entry?.blob || null;
+  }
+
+  async function deleteAudioBlob(id) {
+    const keys = getPossibleAudioKeys(id);
+    const db = await openAudioDb();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(AUDIO_STORE_NAME);
+
+      for (const key of keys) {
+        store.delete(key);
       }
 
-      if ("speechSynthesis" in window) {
-        populateVoices();
-        if (typeof speechSynthesis.onvoiceschanged !== "undefined") {
-          speechSynthesis.onvoiceschanged = populateVoices;
-        }
-      } else {
-        voiceSelect.innerHTML = '<option value="">Speech synthesis not supported</option>';
-      }
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error);
+      };
+    });
+  }
 
-      ttsLang.addEventListener("change", populateVoices);
-      speakBtn.addEventListener("click", startSpeech);
-
-      pauseBtn.addEventListener("click", () => {
-        if ("speechSynthesis" in window && speechSynthesis.speaking && !speechSynthesis.paused) {
-          speechSynthesis.pause();
-          setStatus("読み上げを一時停止しました。");
-        }
-      });
-
-      resumeBtn.addEventListener("click", () => {
-        if ("speechSynthesis" in window && speechSynthesis.paused) {
-          speechSynthesis.resume();
-          setStatus("読み上げを再開しました。");
-        }
-      });
-
-      stopSpeakBtn.addEventListener("click", () => {
-        stopSpeech();
-        setStatus("読み上げを停止しました。");
-      });
-
-      // ===== Recording & Speech Recognition =====
-      const SpeechRecognitionClass =
-        window.SpeechRecognition || window.webkitSpeechRecognition || null;
-
-      const hasGetUserMedia =
-        !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-
-      const hasMediaRecorder =
-        typeof window.MediaRecorder !== "undefined";
-
-      let mediaStream = null;
-      let mediaRecorder = null;
-      let recognition = null;
-
-      let recordedChunks = [];
-      let recordedBlob = null;
-      let recordedUrl = "";
-
-      let isSessionActive = false;
-      let manualStop = false;
-      let shouldRestartRecognition = false;
-      let recognitionStarted = false;
-
-      let transcriptBase = "";
-      let finalTranscript = "";
-
-      function cleanupAudioUrl() {
-        if (recordedUrl) {
-          URL.revokeObjectURL(recordedUrl);
-          recordedUrl = "";
-        }
-      }
-
-      function resetRecordingData() {
-        recordedChunks = [];
-        recordedBlob = null;
-        cleanupAudioUrl();
-        audioPlayer.removeAttribute("src");
-        audioPlayer.load();
-        downloadBtn.disabled = true;
-      }
-
-      function stopAllTracks() {
-        if (mediaStream) {
-          mediaStream.getTracks().forEach(track => {
-            try {
-              track.stop();
-            } catch (e) {}
-          });
-          mediaStream = null;
-        }
-      }
-
-      function stopRecognitionSafe() {
-        shouldRestartRecognition = false;
-        if (recognition) {
-          try {
-            recognition.stop();
-          } catch (e) {}
-        }
-      }
-
-      function setButtonsForIdle() {
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-      }
-
-      function setButtonsForActive() {
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-      }
+  async function clearAllAudioBlobs() {
+    const db = await op
 
       function getRecognitionLanguage() {
-        return recognitionLangEl.value || "en-US";
-      }
-
-      function chooseSupportedMimeType() {
-        if (!hasMediaRecorder) return "";
-
-        const candidates = [
-          "audio/webm;codecs=opus",
-          "audio/webm",
-          "audio/mp4;codecs=mp4a.40.2",
-          "audio/mp4",
-          "audio/ogg;codecs=opus",
-          "audio/ogg"
-        ];
-
-        for (const type of candidates) {
-          try {
-            if (MediaRecorder.isTypeSupported(type)) {
-              return type;
-            }
-          } catch (e) {}
-        }
-        return "";
-      }
-
-      function guessExtensionFromMime(mimeType) {
-        const t = (mimeType || "").toLowerCase();
-        if (t.includes("mp4")) return "m4a";
-        if (t.includes("ogg")) return "ogg";
-        if (t.includes("webm")) return "weba";
-        return "bin";
-      }
-
-      function appendOrReplaceTranscript(interimText) {
-        transcriptEl.value = transcriptBase + finalTranscript + interimText;
-        updateTranscriptStats();
-      }
-
-      function makeRecognition() {
-        if (!SpeechRecognitionClass) return null;
-
-        const r = new SpeechRecognitionClass();
-        r.lang = getRecognitionLanguage();
-        r.continuous = true;
-        r.interimResults = true;
-        r.maxAlternatives = 1;
-
-        r.onstart = () => {
-          recognitionStarted = true;
-          setStatus("Listening... speech recognition started.");
-        };
-
-        r.onresult = (event) => {
-          let interimTranscript = "";
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i];
-            const text = result[0] ? result[0].transcript : "";
-
-            if (result.isFinal) {
-              finalTranscript += text;
-              if (!/\s$/.test(finalTranscript)) {
-                finalTranscript += " ";
-              }
-            } else {
-              interimTranscript += text;
-            }
-          }
-
-          appendOrReplaceTranscript(interimTranscript);
-        };
-
-        r.onerror = (event) => {
-          const code = event && event.error ? event.error : "unknown";
-          let message = `Speech recognition error: ${code}`;
-
-          switch (code) {
-            case "not-allowed":
-            case "service-not-allowed":
-              message += " / microphone or speech service permission denied.";
-              shouldRestartRecognition = false;
-              break;
-            case "audio-capture":
-              message += " / microphone capture failed.";
-              shouldRestartRecognition = false;
-              break;
-            case "language-not-supported":
-              message += " / selected language not supported in this browser.";
-              shouldRestartRecognition = false;
-              break;
-            case "network":
-              message += " / network issue. Recognition may depend on online service.";
-              break;
-            case "no-speech":
-              message += " / no speech detected.";
-              break;
-            case "aborted":
-              message += " / recognition aborted.";
-              break;
-          }
-
-          setStatus(message);
-        };
-
-        r.onend = () => {
-          recognitionStarted = false;
-
-          if (isSessionActive && shouldRestartRecognition && !manualStop) {
-            setTimeout(() => {
-              if (!recognition) return;
-              try {
-                recognition.lang = getRecognitionLanguage();
-                recognition.start();
-              } catch (e) {
-                setStatus("Recognition ended. Auto-restart failed on this browser.");
-              }
-            }, isMobileLike() ? 600 : 250);
-          } else if (isSessionActive) {
-            setStatus("Recording continues. Speech recognition stopped on this browser.");
-          }
-        };
-
-        return r;
-      }
-
-      async function startSession() {
-        if (isSessionActive) return;
-
-        if (!isSecureEnough()) {
-          setStatus("Microphone access requires HTTPS or localhost.");
-          return;
-        }
-
-        if (!hasGetUserMedia) {
-          setStatus("This browser does not support microphone capture.");
-          return;
-        }
-
-        manualStop = false;
-        isSessionActive = true;
-        shouldRestartRecognition = true;
-        recognitionStarted = false;
-
-        setButtonsForActive();
-        resetRecordingData();
-
-        if (appendMode.value === "append") {
-          transcriptBase = transcriptEl.value ? transcriptEl.value.trimEnd() + "\n" : "";
-        } else {
-          transcriptBase = "";
-          transcriptEl.value = "";
-          updateTranscriptStats();
-        }
-
-        finalTranscript = "";
-
-        try {
-          mediaStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
-          });
-        } catch (err) {
-          console.error(err);
-          isSessionActive = false;
-          setButtonsForIdle();
-
-          if (err && err.name === "NotAllowedError") {
-            setStatus("Microphone permission was denied.");
-          } else if (err && err.name === "NotFoundError") {
-            setStatus("No microphone was found.");
-          } else {
-            setStatus("Failed to access microphone.");
-          }
-          return;
-        }
-
-        if (hasMediaRecorder) {
-          try {
-            const mimeType = chooseSupportedMimeType();
-            mediaRecorder = mimeType
-              ? new MediaRecorder(mediaStream, { mimeType })
-              : new MediaRecorder(mediaStream);
-
-            recordedChunks = [];
-
-            mediaRecorder.ondataavailable = (event) => {
-              if (event.data && event.data.size > 0) {
-                recordedChunks.push(event.data);
-              }
-            };
-
-            mediaRecorder.onerror = (event) => {
-              console.error("MediaRecorder error:", event);
-              setStatus("Recording error occurred.");
-            };
-
-            mediaRecorder.onstop = () => {
-              const actualType =
-                (mediaRecorder && mediaRecorder.mimeType) ||
-                chooseSupportedMimeType() ||
-                "audio/webm";
-
-              if (recordedChunks.length > 0) {
-                recordedBlob = new Blob(recordedChunks, { type: actualType });
-                cleanupAudioUrl();
-                recordedUrl = URL.createObjectURL(recordedBlob);
-                audioPlayer.src = recordedUrl;
-                audioPlayer.load();
-                downloadBtn.disabled = false;
-                setStatus(`Recording finished. Audio ready (${actualType || "browser default"}).`);
-              } else {
-                setStatus("Recording finished, but no audio data was captured.");
-              }
-
-              stopAllTracks();
-            };
-
-            mediaRecorder.start(1000);
-          } catch (err) {
-            console.error(err);
-            mediaRecorder = null;
-            setStatus("Microphone opened, but recording is not supported in this browser.");
-          }
-        } else {
-          setStatus("Microphone opened, but recording is not supported in this browser.");
-        }
-
-        if (SpeechRecognitionClass) {
-          recognition = makeRecognition();
-          if (recognition) {
-            try {
-              recognition.start();
-            } catch (err) {
-              console.error(err);
-              setStatus("Recording started. Speech recognition could not start on this browser.");
-            }
-          }
-        } else {
-          setStatus("Recording started. Speech recognition is not supported in this browser.");
-        }
-      }
-
-      function stopSession() {
-        if (!isSessionActive) return;
-
-        manualStop = true;
-        isSessionActive = false;
-        shouldRestartRecognition = false;
-
-        stopRecognitionSafe();
-
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-          try {
-            mediaRecorder.stop();
-          } catch (e) {
-            stopAllTracks();
-          }
-        } else {
-          stopAllTracks();
-        }
-
-        setButtonsForIdle();
-
-        if (!recordedChunks.length) {
-          setStatus("Stopped.");
-        }
-      }
-
-      downloadBtn.addEventListener("click", () => {
-        if (!recordedBlob) {
-          setStatus("No audio available to download.");
-          return;
-        }
-
-        const mimeType = recordedBlob.type || "";
-        const ext = guessExtensionFromMime(mimeType);
-        const fileName = `speechpractice-audio.${ext}`;
-
-        const a = document.createElement("a");
-        a.href = recordedUrl || URL.createObjectURL(recordedBlob);
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        setStatus(`Downloaded: ${fileName}`);
-      });
-
-      startBtn.addEventListener("click", startSession);
-      stopBtn.addEventListener("click", stopSession);
-
-      recognitionLangEl.addEventListener("change", () => {
-        if (recognition) {
-          recognition.lang = getRecognitionLanguage();
-        }
-      });
-
-      if (!isSecureEnough()) {
-        setStatus("Open this page via HTTPS or localhost to use the microphone.");
-      } else if (!hasGetUserMedia) {
-        setStatus("This browser does not support microphone capture.");
-      } else if (!SpeechRecognitionClass) {
-        setStatus("This browser can record audio, but speech recognition is not supported.");
-      } else {
-        setStatus("Ready. Press Start.");
-      }
-
-      window.addEventListener("beforeunload", () => {
-        try {
-          stopSpeech();
-        } catch (e) {}
-        try {
-          stopRecognitionSafe();
-        } catch (e) {}
-        try {
-          if (mediaRecorder && mediaRecorder.state !== "inactive") {
-            mediaRecorder.stop();
-          }
-        } catch (e) {}
-        try {
-          stopAllTracks();
-        } catch (e) {}
-        try {
-          cleanupAudioUrl();
-        } catch (e) {}
-      });
-    })();
-  </script>
-</body>
-</html>
+        return recognitionLa
