@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>English Speech Practice - Education Edition</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    .timer-circle {
+      transition: stroke-dashoffset 1s linear, color 0.3s ease;
+    }
+    .progress-bar {
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-100 p-4 md:p-8 font-sans">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl md:text-4xl font-bold mb-6 text-center text-indigo-700">
+      English Speech Practice
+    </h1>
+
+    <div id="error-container" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-start">
+      <i data-lucide="alert-circle" class="mr-2 mt-0.5 flex-shrink-0 w-5 h-5"></i>
+      <p id="error-text"></p>
+    </div>
+
+    <div id="mic-status" class="hidden mb-6 flex items-center justify-center text-sm font-medium text-green-700 bg-green-50 py-2 rounded-lg border border-green-200">
+      <i data-lucide="mic" class="mr-2 w-4 h-4"></i>
+      Microphone connected and ready
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-8 border border-gray-100">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
+          <input id="student-name" type="text" placeholder="e.g. Taro Yamada"
+            class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Topic / Prompt</label>
+          <input id="speech-topic" type="text" placeholder="e.g. My favorite place in Kyoto"
+            class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <i data-lucide="clock" class="text-gray-500 w-5 h-5"></i>
+          <div class="flex-1">
+            <label class="block text-sm text-gray-600 font-medium mb-1">Time Limit</label>
+            <select id="time-select" class="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer">
+              <option value="30">30 Seconds</option>
+              <option value="60" selected>1 Minute</option>
+              <option value="90">1 Minute 30 Seconds</option>
+              <option value="120">2 Minutes</option>
+              <option value="150">2 Minutes 30 Seconds</option>
+              <option value="180">3 Minutes</option>
+              <option value="210">3 Minutes 30 Seconds</option>
+              <option value="240">4 Minutes</option>
+              <option value="270">4 Minutes 30 Seconds</option>
+              <option value="300">5 Minutes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <i data-lucide="target" class="text-gray-500 w-5 h-5"></i>
+          <div class="flex-1">
+            <label class="block text-sm text-gray-600 font-medium mb-1">Target Words</label>
+            <input id="target-words" type="number" min="10" step="10" value="120"
+              class="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <i data-lucide="languages" class="text-gray-500 w-5 h-5"></i>
+          <div class="flex-1">
+            <label class="block text-sm text-gray-600 font-medium mb-1">Recognition Language</label>
+            <select id="lang-select" class="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="en-US" selected>English (US)</option>
+              <option value="en-GB">English (UK)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2">
+          <div class="flex flex-col items-center">
+            <div class="mb-6 relative">
+              <svg class="w-44 h-44 md:w-52 md:h-52 transform -rotate-90">
+                <circle cx="96" cy="96" r="88" stroke="currentColor" stroke-width="12" fill="transparent" class="text-gray-100"></circle>
+                <circle id="timer-circle" cx="96" cy="96" r="88" stroke="currentColor" stroke-width="12" fill="transparent" class="timer-circle text-gray-300"></circle>
+              </svg>
+
+              <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                <span id="timer-text" class="text-4xl md:text-5xl font-mono font-bold tracking-tight text-gray-800">
+                  01:00
+                </span>
+                <span id="recording-indicator" class="hidden text-red-500 text-sm font-semibold animate-pulse mt-1">
+                  ● Recording
+                </span>
+              </div>
+            </div>
+
+            <div class="w-full grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
+                <div class="text-xs uppercase tracking-wide text-indigo-500 font-semibold">Live Words</div>
+                <div class="text-[11px] text-indigo-400 mt-1 uppercase tracking-wide">Provisional</div>
+                <div id="word-count" class="text-2xl font-bold text-indigo-800">0</div>
+              </div>
+
+              <div class="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
+                <div class="text-xs uppercase tracking-wide text-green-500 font-semibold">WPM</div>
+                <div id="wpm-count" class="text-2xl font-bold text-green-800">0</div>
+              </div>
+
+              <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center">
+                <div class="text-xs uppercase tracking-wide text-amber-500 font-semibold">Target</div>
+                <div id="target-display" class="text-2xl font-bold text-amber-800">120</div>
+              </div>
+
+              <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                <div class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Saved</div>
+                <div id="saved-count" class="text-2xl font-bold text-slate-800">0</div>
+              </div>
+            </div>
+
+            <div class="w-full mb-8">
+              <div class="flex justify-between items-center text-sm mb-2">
+                <span class="font-medium text-gray-700">Live Target Progress</span>
+                <span id="target-progress-label" class="text-gray-600">0 / 120 words</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                <div id="target-progress-bar" class="progress-bar bg-indigo-500 h-4 rounded-full" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap justify-center gap-3">
+              <button id="start-btn" class="flex items-center px-7 py-4 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors font-bold shadow-lg hover:shadow-xl">
+                <i data-lucide="mic" class="mr-2 w-6 h-6"></i> Start Speaking
+              </button>
+
+              <button id="stop-btn" class="hidden items-center px-7 py-4 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors font-bold shadow-lg animate-pulse">
+                <i data-lucide="square" class="mr-2 w-6 h-6 fill-current"></i> Stop Recording
+              </button>
+
+              <button id="reset-live-btn" class="flex items-center px-6 py-4 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors font-bold shadow-md">
+                <i data-lucide="rotate-ccw" class="mr-2 w-5 h-5"></i> Reset Text
+              </button>
+
+              <button id="copy-btn" class="flex items-center px-6 py-4 bg-slate-600 text-white rounded-full hover:bg-slate-700 transition-colors font-bold shadow-md">
+                <i data-lucide="copy" class="mr-2 w-5 h-5"></i> Copy
+              </button>
+
+              <button id="download-btn" class="flex items-center px-6 py-4 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-colors font-bold shadow-md">
+                <i data-lucide="download" class="mr-2 w-5 h-5"></i> Download
+              </button>
+            </div>
+
+            <div class="flex flex-wrap justify-center gap-3 mt-3">
+              <button id="export-csv-btn" class="flex items-center px-6 py-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-bold shadow-md">
+                <i data-lucide="file-down" class="mr-2 w-5 h-5"></i> Export CSV
+              </button>
+
+              <button id="export-json-btn" class="flex items-center px-6 py-4 bg-violet-600 text-white rounded-full hover:bg-violet-700 transition-colors font-bold shadow-md" title="Download all saved practice records, including audio, as a backup file">
+                <i data-lucide="database" class="mr-2 w-5 h-5"></i> Save Practice Data
+              </button>
+
+              <label class="flex items-center px-6 py-4 bg-teal-600 text-white rounded-full hover:bg-teal-700 transition-colors font-bold shadow-md cursor-pointer" title="Load a previously saved practice data file, including audio">
+                <i data-lucide="upload" class="mr-2 w-5 h-5"></i> Load Practice Data
+                <input id="import-json-input" type="file" accept=".json,application/json" class="hidden">
+              </label>
+
+              <button id="clear-history-btn" class="flex items-center px-6 py-4 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors font-bold shadow-md">
+                <i data-lucide="trash-2" class="mr-2 w-5 h-5"></i> Clear History
+              </button>
+            </div>
+          </div>
+
+          <div id="live-transcript-container" class="mt-8 p-5 md:p-6 bg-indigo-50 rounded-xl border border-indigo-100 min-h-[180px]">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+              <h3 class="text-sm text-indigo-800 font-semibold flex items-center">
+                <i data-lucide="mic" class="mr-2 w-4 h-4"></i> Live Transcript (Provisional)
+              </h3>
+              <div class="text-sm text-gray-500">Recommended: Chrome / Edge ・ This text may change slightly when finalized.</div>
+            </div>
+
+            <p id="live-transcript-text" class="text-gray-800 text-lg md:text-xl leading-relaxed whitespace-pre-wrap break-words">
+              <span class="text-indigo-400 italic">Press “Start Speaking” to begin.</span>
+            </p>
+          </div>
+
+          <div id="latest-review-container" class="mt-6 hidden p-5 md:p-6 bg-white rounded-xl border border-gray-200">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+              <h3 class="text-sm text-gray-800 font-semibold flex items-center">
+                <i data-lucide="headphones" class="mr-2 w-4 h-4"></i>
+                Latest Recording Review
+              </h3>
+              <div id="latest-review-meta" class="text-sm text-gray-500"></div>
+            </div>
+
+            <audio id="latest-audio-player" controls class="w-full mb-4"></audio>
+
+            <div class="mb-4">
+              <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Transcript for Review (Final)</h4>
+              <div id="latest-review-text" class="bg-gray-50 p-4 rounded-lg text-gray-700 text-base leading-relaxed border border-gray-100 whitespace-pre-wrap">
+                No recording yet.
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+              <button id="save-review-btn" class="flex items-center px-6 py-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors font-bold shadow-md">
+                <i data-lucide="save" class="mr-2 w-5 h-5"></i> Save Review
+              </button>
+
+              <button id="discard-latest-btn" class="flex items-center px-6 py-3 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors font-bold shadow-md">
+                <i data-lucide="x-circle" class="mr-2 w-5 h-5"></i> Discard Latest
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-1">
+          <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+              <i data-lucide="clipboard-check" class="mr-2 w-5 h-5"></i>
+              Self Evaluation
+            </h2>
+
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Content (1-5)</label>
+                <select id="score-content" class="w-full border border-gray-300 rounded-lg py-2 px-3">
+                  <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Fluency (1-5)</label>
+                <select id="score-fluency" class="w-full border border-gray-300 rounded-lg py-2 px-3">
+                  <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Pronunciation (1-5)</label>
+                <select id="score-pronunciation" class="w-full border border-gray-300 rounded-lg py-2 px-3">
+                  <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Vocabulary (1-5)</label>
+                <select id="score-vocabulary" class="w-full border border-gray-300 rounded-lg py-2 px-3">
+                  <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Grammar (1-5)</label>
+                <select id="score-grammar" class="w-full border border-gray-300 rounded-lg py-2 px-3">
+                  <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
+                </select>
+              </div>
+
+              <div class="bg-white rounded-xl border border-gray-200 p-4">
+                <div class="text-sm text-gray-500 mb-1">Total Self Score</div>
+                <div id="total-score" class="text-3xl font-bold text-indigo-700">15 / 25</div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Reflection / Memo</label>
+                <textarea id="reflection-note" rows="7" placeholder="What went well? What should I improve next time?"
+                  class="w-full border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Search Saved Recordings</label>
+          <input id="search-input" type="text" placeholder="Search by student, topic, transcript, memo..."
+            class="w-full border border-gray-300 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Sort</label>
+          <select id="sort-select" class="w-full border border-gray-300 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="newest" selected>Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="words-desc">Most Words</option>
+            <option value="wpm-desc">Highest WPM</option>
+            <option value="score-desc">Highest Score</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <h2 class="text-2xl font-bold text-gray-800 mb-4 px-2">Saved Recordings</h2>
+
+      <div id="empty-state" class="bg-white rounded-xl shadow-sm border border-gray-200 p-10 text-center text-gray-500">
+        <i data-lucide="mic" class="mx-auto mb-3 text-gray-300 w-12 h-12"></i>
+        <p class="text-lg">No recordings yet.</p>
+        <p class="text-sm mt-1">Your practice sessions will appear here.</p>
+      </div>
+
+      <div id="recordings-list" class="space-y-4"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'speechPracticeEducation_v9';
+    const AUDIO_DB_NAME = 'speechPracticeEducationAudioDB';
+    const AUDIO_STORE_NAME = 'audioRecordings';
+    const AUDIO_DB_VERSION = 1;
+
+    const APP_HEARTBEAT_INTERVAL_MS = 5000;
+
+    let timeLimit = 60;
+    let timeLeft = 60;
+    let isRecording = false;
+    let recordings = [];
+    let finalTranscript = '';
+    let interimTranscript = '';
+
+    let timerInterval = null;
+    let mediaRecorder = null;
+    let recognition = null;
+    let globalAudioStream = null;
+
+    let recordingStartTime = null;
+    let lastSessionDuration = 0;
+    let latestAudioUrl = null;
+    let pendingAudioUrl = null;
+    let pendingAudioBlob = null;
+    let latestReviewAudioBlob = null;
+    let audioChunks = [];
+    let latestDraftRecording = null;
+
+    let stopRequested = false;
+    let reviewFinalized = false;
+    let finalizeTimer = null;
+    let pendingReady = { audio: false, recognition: false };
+    let renderedAudioUrls = [];
+    let isAppClosing = false;
+    let appHeartbeatTimer = null;
+
+    const CIRCLE_RADIUS = 88;
+    const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
+
+    // DOM
+    const timeSelect = document.getElementById('time-select');
+    const targetWordsInput = document.getElementById('target-words');
+    const langSelect = document.getElementById('lang-select');
+    const studentNameInput = document.getElementById('student-name');
+    const speechTopicInput = document.getElementById('speech-topic');
+
+    const timerText = document.getElementById('timer-text');
+    const timerCircle = document.getElementById('timer-circle');
+    const recordingIndicator = document.getElementById('recording-indicator');
+
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const resetLiveBtn = document.getElementById('reset-live-btn');
+    const copyBtn = document.getElementById('copy-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const clearHistoryBtn = document.getElementById('clear-history-btn');
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    const exportJsonBtn = document.getElementById('export-json-btn');
+    const importJsonInput = document.getElementById('import-json-input');
+    const saveReviewBtn = document.getElementById('save-review-btn');
+    const discardLatestBtn = document.getElementById('discard-latest-btn');
+
+    const errorContainer = document.getElementById('error-container');
+    const errorText = document.getElementById('error-text');
+    const micStatus = document.getElementById('mic-status');
+    const liveTranscriptText = document.getElementById('live-transcript-text');
+
+    const emptyState = document.getElementById('empty-state');
+    const recordingsList = document.getElementById('recordings-list');
+
+    const wordCountEl = document.getElementById('word-count');
+    const wpmCountEl = document.getElementById('wpm-count');
+    const targetDisplayEl = document.getElementById('target-display');
+    const targetProgressLabel = document.getElementById('target-progress-label');
+    const targetProgressBar = document.getElementById('target-progress-bar');
+    const savedCountEl = document.getElementById('saved-count');
+
+    const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
+
+    const scoreContent = document.getElementById('score-content');
+    const scoreFluency = document.getElementById('score-fluency');
+    const scorePronunciation = document.getElementById('score-pronunciation');
+    const scoreVocabulary = document.getElementById('score-vocabulary');
+    const scoreGrammar = document.getElementById('score-grammar');
+    const totalScoreEl = document.getElementById('total-score');
+    const reflectionNote = document.getElementById('reflection-note');
+
+    const latestReviewContainer = document.getElementById('latest-review-container');
+    const latestAudioPlayer = document.getElementById('latest-audio-player');
+    const latestReviewText = document.getElementById('latest-review-text');
+    const latestReviewMeta = document.getElementById('latest-review-meta');
+
+    timerCircle.style.strokeDasharray = CIRCUMFERENCE;
+    timerCircle.style.strokeDashoffset = 0;
+    lucide.createIcons();
+
+    function getCurrentTranscript() {
+      return `${finalTranscript} ${interimTranscript}`.replace(/\s+/g, ' ').trim();
+    }
+
+    function normalizeAudioId(id) {
+      return String(id ?? '').trim();
+    }
+
+    function getPossibleAudioKeys(id) {
+      const normalized = normalizeAudioId(id);
+      const keys = [normalized];
+
+      if (/^\d+$/.test(normalized)) {
+        const numericKey = Number(normalized);
+        if (String(numericKey) === normalized) {
+          keys.push(numericKey);
+        }
+      }
+
+      return keys;
+    }
+
+    function getAudioExtensionFromMimeType(mimeType = '') {
+      const map = {
+        'audio/webm': 'weba',
+        'audio/mp4': 'm4a',
+        'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
+        'audio/wav': 'wav',
+        'audio/ogg': 'ogg'
+      };
+      return map[mimeType] || 'weba';
+    }
+
+    function escapeHtml(str = '') {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function clearRenderedAudioUrls() {
+      renderedAudioUrls.forEach(url => URL.revokeObjectURL(url));
+      renderedAudioUrls = [];
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const [meta, base64] = dataUrl.split(',');
+      const mimeMatch = meta.match(/data:(.*?);base64/);
+      const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      return new Blob([bytes], { type: mime });
+    }
+
+    function postLauncherSignal(path, useBeacon = false) {
+      if (!path) return;
+      if (!(location.protocol === 'http:' || location.protocol === 'https:')) return;
+
+      try {
+        if (useBeacon && navigator.sendBeacon) {
+          const ok = navigator.sendBeacon(path, '1');
+          if (ok) return;
+        }
+
+        fetch(path, {
+          method: 'POST',
+          body: '1',
+          keepalive: true,
+          cache: 'no-store',
+          headers: { 'Content-Type': 'text/plain' }
+        }).catch(() => {});
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    function startAppHeartbeat() {
+      if (!(location.protocol === 'http:' || location.protocol === 'https:')) return;
+
+      stopAppHeartbeat();
+      postLauncherSignal('/__ping__');
+
+      appHeartbeatTimer = setInterval(() => {
+        if (isAppClosing) return;
+        postLauncherSignal('/__ping__');
+      }, APP_HEARTBEAT_INTERVAL_MS);
+    }
+
+    function stopAppHeartbeat() {
+      if (appHeartbeatTimer) {
+        clearInterval(appHeartbeatTimer);
+        appHeartbeatTimer = null;
+      }
+    }
+
+    function openAudioDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(AUDIO_DB_NAME, AUDIO_DB_VERSION);
+
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(AUDIO_STORE_NAME)) {
+            db.createObjectStore(AUDIO_STORE_NAME, { keyPath: 'id' });
+          }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function saveAudioBlob(id, blob) {
+      if (!blob) return;
+
+      const key = normalizeAudioId(id);
+      const db = await openAudioDb();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUDIO_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(AUDIO_STORE_NAME);
+
+        store.put({
+          id: key,
+          blob,
+          mimeType: blob.type || 'audio/webm',
+          savedAt: new Date().toISOString()
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+      });
+    }
+
+    async function getAudioEntry(id) {
+      const keys = getPossibleAudioKeys(id);
+      const db = await openAudioDb();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUDIO_STORE_NAME, 'readonly');
+        const store = tx.objectStore(AUDIO_STORE_NAME);
+        let index = 0;
+
+        const tryNext = () => {
+          if (index >= keys.length) {
+            db.close();
+            resolve(null);
+            return;
+          }
+
+          const request = store.get(keys[index]);
+          index += 1;
+
+          request.onsuccess = () => {
+            if (request.result) {
+              db.close();
+              resolve(request.result);
+            } else {
+              tryNext();
+            }
+          };
+
+          request.onerror = () => {
+            db.close();
+            reject(request.error);
+          };
+        };
+
+        tryNext();
+      });
+    }
+
+    async function getAudioBlob(id) {
+      const entry = await getAudioEntry(id);
+      return entry?.blob || null;
+    }
+
+    async function deleteAudioBlob(id) {
+      const keys = getPossibleAudioKeys(id);
+      const db = await openAudioDb();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUDIO_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(AUDIO_STORE_NAME);
+
+        for (const key of keys) {
+          store.delete(key);
+        }
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+      });
+    }
+
+    async function clearAllAudioBlobs() {
+      const db = await openAudioDb();
+
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(AUDIO_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(AUDIO_STORE_NAME);
+        store.clear();
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+      });
+    }
+
+    function setButtonDisabled(button, disabled) {
+      button.disabled = disabled;
+      button.classList.toggle('opacity-60', disabled);
+      button.classList.toggle('cursor-not-allowed', disabled);
+    }
+
+    function setFinalizeUiState(isFinalizing) {
+      setButtonDisabled(startBtn, isFinalizing);
+      setButtonDisabled(resetLiveBtn, isFinalizing);
+      setButtonDisabled(saveReviewBtn, isFinalizing);
+      setButtonDisabled(discardLatestBtn, isFinalizing);
+    }
+
+    function pauseAndReleaseAudioElements() {
+      try {
+        latestAudioPlayer.pause();
+        latestAudioPlayer.removeAttribute('src');
+        latestAudioPlayer.load();
+      } catch (e) {}
+
+      document.querySelectorAll('audio').forEach(player => {
+        try {
+          player.pause();
+          player.removeAttribute('src');
+          player.load();
+        } catch (e) {}
+      });
+    }
+
+    function cleanupAppResources() {
+      if (isAppClosing) return;
+      isAppClosing = true;
+
+      stopAppHeartbeat();
+
+      clearTimeout(finalizeTimer);
+      clearInterval(timerInterval);
+      timerInterval = null;
+
+      stopRequested = false;
+      reviewFinalized = false;
+      pendingReady = { audio: false, recognition: false };
+
+      try {
+        if (recognition) {
+          recognition.onresult = null;
+          recognition.onend = null;
+          recognition.onerror = null;
+          recognition.stop();
+        }
+      } catch (e) {}
+
+      try {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.ondataavailable = null;
+          mediaRecorder.onstop = null;
+          mediaRecorder.stop();
+        }
+      } catch (e) {}
+
+      try {
+        if (globalAudioStream) {
+          globalAudioStream.getTracks().forEach(track => {
+            try {
+              track.stop();
+            } catch (e) {}
+          });
+          globalAudioStream = null;
+        }
+      } catch (e) {}
+
+      pauseAndReleaseAudioElements();
+
+      if (latestAudioUrl) {
+        URL.revokeObjectURL(latestAudioUrl);
+        latestAudioUrl = null;
+      }
+
+      if (pendingAudioUrl) {
+        URL.revokeObjectURL(pendingAudioUrl);
+        pendingAudioUrl = null;
+      }
+
+      clearRenderedAudioUrls();
+
+      pendingAudioBlob = null;
+      latestReviewAudioBlob = null;
+      audioChunks = [];
+      latestDraftRecording = null;
+    }
+
+    function handleAppClosingSignal() {
+      stopAppHeartbeat();
+      postLauncherSignal('/__shutdown__', true);
+      cleanupAppResources();
+    }
+
+    function beginFinalizeReview() {
+      stopRequested = true;
+      reviewFinalized = false;
+      latestDraftRecording = null;
+      pendingAudioUrl = null;
+      pendingAudioBlob = null;
+      latestReviewAudioBlob = null;
+      pendingReady = {
+        audio: false,
+        recognition: !recognition
+      };
+
+      setFinalizeUiState(true);
+
+      latestReviewContainer.classList.remove('hidden');
+      latestReviewText.textContent = getCurrentTranscript() || 'Finalizing transcript...';
+      latestReviewMeta.textContent = 'Finalizing transcript...';
+      latestAudioPlayer.removeAttribute('src');
+      latestAudioPlayer.load();
+
+      clearTimeout(finalizeTimer);
+      finalizeTimer = setTimeout(() => {
+        pendingReady.recognition = true;
+        maybeFinalizeLatestReview();
+      }, 1200);
+    }
+
+    function maybeFinalizeLatestReview() {
+      if (isAppClosing) return;
+      if (reviewFinalized) return;
+      if (!pendingReady.audio || !pendingReady.recognition) return;
+
+      reviewFinalized = true;
+      stopRequested = false;
+
+      clearTimeout(finalizeTimer);
+
+      const transcript = getCurrentTranscript();
+      const words = getWordCount(transcript);
+      const duration = lastSessionDuration > 0 ? lastSessionDuration : 1;
+      const wpm = calculateWpm(words, duration);
+      const draftId = normalizeAudioId(Date.now());
+
+      latestReviewAudioBlob = pendingAudioBlob;
+
+      latestDraftRecording = {
+        id: draftId,
+        audioId: draftId,
+        hasAudio: !!latestReviewAudioBlob,
+        date: new Date().toISOString(),
+        transcript,
+        duration,
+        words,
+        wpm
+      };
+
+      updateLatestReview(pendingAudioUrl, transcript, duration, words, wpm);
+      pendingAudioUrl = null;
+      pendingAudioBlob = null;
+      interimTranscript = '';
+      setFinalizeUiState(false);
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = langSelect.value;
+
+      recognition.onresult = (event) => {
+        if (isAppClosing) return;
+
+        interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const chunk = event.results[i][0].transcript.trim();
+
+          if (event.results[i].isFinal) {
+            finalTranscript += (finalTranscript ? ' ' : '') + chunk;
+          } else {
+            interimTranscript += (interimTranscript ? ' ' : '') + chunk;
+          }
+        }
+
+        const currentText = getCurrentTranscript();
+
+        if (currentText) {
+          liveTranscriptText.textContent = currentText;
+        } else {
+          liveTranscriptText.innerHTML = '<span class="text-indigo-400 italic">Listening to your voice...</span>';
+        }
+
+        updateLiveStats(currentText);
+
+        if (stopRequested) {
+          latestReviewContainer.classList.remove('hidden');
+          latestReviewText.textContent = currentText || 'Finalizing transcript...';
+          latestReviewMeta.textContent = 'Finalizing transcript...';
+
+          clearTimeout(finalizeTimer);
+          finalizeTimer = setTimeout(() => {
+            pendingReady.recognition = true;
+            maybeFinalizeLatestReview();
+          }, 500);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isAppClosing) return;
+
+        if (isRecording) {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.error('Failed to restart recognition', e);
+          }
+          return;
+        }
+
+        pendingReady.recognition = true;
+        maybeFinalizeLatestReview();
+      };
+
+      recognition.onerror = (event) => {
+        if (isAppClosing) return;
+
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          showError('マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。');
+        }
+      };
+    } else {
+      showError('お使いのブラウザは音声認識機能をサポートしていません。Google Chrome または Edge をご利用ください。');
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = (seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function formatDateTime(dateString) {
+      return new Date(dateString).toLocaleString();
+    }
+
+    function getWordCount(text) {
+      if (!text || !text.trim()) return 0;
+      return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+    }
+
+    function getCurrentTarget() {
+      return Number(targetWordsInput.value) || 0;
+    }
+
+    function getSelfScore() {
+      return (
+        Number(scoreContent.value) +
+        Number(scoreFluency.value) +
+        Number(scorePronunciation.value) +
+        Number(scoreVocabulary.value) +
+        Number(scoreGrammar.value)
+      );
+    }
+
+    function updateSelfScoreUI() {
+      totalScoreEl.textContent = `${getSelfScore()} / 25`;
+    }
+
+    function getLiveElapsedSeconds() {
+      if (!recordingStartTime) return 0;
+      return Math.max(1, Math.floor((Date.now() - recordingStartTime) / 1000));
+    }
+
+    function calculateWpm(words, seconds) {
+      if (!seconds || seconds <= 0) return 0;
+      return Math.round((words / seconds) * 60);
+    }
+
+    function updateLatestReview(audioUrl, transcript, duration, words, wpm) {
+      if (latestAudioUrl) {
+        URL.revokeObjectURL(latestAudioUrl);
+      }
+
+      latestAudioUrl = audioUrl;
+      latestAudioPlayer.src = latestAudioUrl;
+      latestReviewText.textContent = transcript || 'No transcript available.';
+      latestReviewMeta.textContent = `${formatTime(duration)} / Final Words: ${words} / ${wpm} WPM`;
+      latestReviewContainer.classList.remove('hidden');
+    }
+
+    function clearLatestReview() {
+      clearTimeout(finalizeTimer);
+      stopRequested = false;
+      reviewFinalized = false;
+      pendingReady = { audio: false, recognition: false };
+
+      if (pendingAudioUrl) {
+        URL.revokeObjectURL(pendingAudioUrl);
+        pendingAudioUrl = null;
+      }
+
+      if (latestAudioUrl) {
+        URL.revokeObjectURL(latestAudioUrl);
+        latestAudioUrl = null;
+      }
+
+      pendingAudioBlob = null;
+      latestReviewAudioBlob = null;
+
+      latestAudioPlayer.removeAttribute('src');
+      latestAudioPlayer.load();
+      latestReviewText.textContent = 'No recording yet.';
+      latestReviewMeta.textContent = '';
+      latestReviewContainer.classList.add('hidden');
+      latestDraftRecording = null;
+
+      setFinalizeUiState(false);
+    }
+
+    function updateLiveStats(text) {
+      const words = getWordCount(text);
+      wordCountEl.textContent = words;
+
+      const elapsed = isRecording ? getLiveElapsedSeconds() : lastSessionDuration;
+      const wpm = calculateWpm(words, elapsed);
+      wpmCountEl.textContent = wpm;
+
+      const target = getCurrentTarget();
+      targetDisplayEl.textContent = target;
+      targetProgressLabel.textContent = `${words} / ${target} words`;
+
+      const progress = target > 0 ? Math.min((words / target) * 100, 100) : 0;
+      targetProgressBar.style.width = `${progress}%`;
+
+      if (progress >= 100) {
+        targetProgressBar.classList.remove('bg-indigo-500');
+        targetProgressBar.classList.add('bg-green-500');
+      } else {
+        targetProgressBar.classList.add('bg-indigo-500');
+        targetProgressBar.classList.remove('bg-green-500');
+      }
+    }
+
+    function resetLiveStats() {
+      wordCountEl.textContent = '0';
+      wpmCountEl.textContent = '0';
+      targetDisplayEl.textContent = getCurrentTarget();
+      targetProgressLabel.textContent = `0 / ${getCurrentTarget()} words`;
+      targetProgressBar.style.width = '0%';
+      targetProgressBar.classList.add('bg-indigo-500');
+      targetProgressBar.classList.remove('bg-green-500');
+    }
+
+    function updateSavedCount() {
+      savedCountEl.textContent = recordings.length;
+    }
+
+    function updateTimerUI() {
+      timerText.textContent = formatTime(timeLeft);
+      const offset = CIRCUMFERENCE * (1 - timeLeft / timeLimit);
+      timerCircle.style.strokeDashoffset = offset;
+
+      if (isRecording) {
+        timerCircle.classList.remove('text-gray-300');
+        timerCircle.classList.add('text-indigo-500');
+        timerText.classList.remove('text-gray-800');
+        timerText.classList.add('text-indigo-600');
+      } else {
+        timerCircle.classList.add('text-gray-300');
+        timerCircle.classList.remove('text-indigo-500');
+        timerText.classList.add('text-gray-800');
+        timerText.classList.remove('text-indigo-600');
+      }
+    }
+
+    function showError(msg) {
+      errorText.textContent = msg;
+      errorContainer.classList.remove('hidden');
+    }
+
+    function hideError() {
+      errorContainer.classList.add('hidden');
+      errorText.textContent = '';
+    }
+
+    function resetTranscriptArea() {
+      finalTranscript = '';
+      interimTranscript = '';
+      liveTranscriptText.innerHTML = '<span class="text-indigo-400 italic">Press “Start Speaking” to begin.</span>';
+      resetLiveStats();
+    }
+
+    function saveHistoryToLocalStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(recordings));
+      } catch (e) {
+        console.error('Failed to save history:', e);
+      }
+    }
+
+    function loadHistoryFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+
+        return parsed.map(rec => ({
+          ...rec,
+          id: normalizeAudioId(rec.id),
+          audioId: normalizeAudioId(rec.audioId ?? rec.id),
+          hasAudio: Boolean(rec.hasAudio)
+        }));
+      } catch (e) {
+        console.error('Failed to load history:', e);
+        return [];
+      }
+    }
+
+    function addRecordingToHistory(record) {
+      recordings.unshift(record);
+      saveHistoryToLocalStorage();
+      renderRecordings();
+    }
+
+    function buildRecordingObjectFromDraft() {
+      if (!latestDraftRecording) return null;
+
+      return {
+        ...latestDraftRecording,
+        id: normalizeAudioId(latestDraftRecording.id),
+        studentName: studentNameInput.value.trim(),
+        topic: speechTopicInput.value.trim(),
+        targetWords: getCurrentTarget(),
+        language: langSelect.value,
+        selfScore: getSelfScore(),
+        scores: {
+          content: Number(scoreContent.value),
+          fluency: Number(scoreFluency.value),
+          pronunciation: Number(scorePronunciation.value),
+          vocabulary: Number(scoreVocabulary.value),
+          grammar: Number(scoreGrammar.value)
+        },
+        note: reflectionNote.value.trim(),
+        hasAudio: !!latestReviewAudioBlob,
+        audioId: normalizeAudioId(latestDraftRecording.audioId ?? latestDraftRecording.id)
+      };
+    }
+
+    function getFilteredAndSortedRecordings() {
+      const query = searchInput.value.trim().toLowerCase();
+
+      let result = recordings.filter(rec => {
+        if (!query) return true;
+        return (
+          (rec.studentName || '').toLowerCase().includes(query) ||
+          (rec.topic || '').toLowerCase().includes(query) ||
+          (rec.transcript || '').toLowerCase().includes(query) ||
+          (rec.note || '').toLowerCase().includes(query)
+        );
+      });
+
+      const sortValue = sortSelect.value;
+
+      result.sort((a, b) => {
+        if (sortValue === 'oldest') return new Date(a.date) - new Date(b.date);
+        if (sortValue === 'words-desc') return (b.words || 0) - (a.words || 0);
+        if (sortValue === 'wpm-desc') return (b.wpm || 0) - (a.wpm || 0);
+        if (sortValue === 'score-desc') return (b.selfScore || 0) - (a.selfScore || 0);
+        return new Date(b.date) - new Date(a.date);
+      });
+
+      return result;
+    }
+
+    function escapeCsv(value) {
+      const str = String(value ?? '').replace(/"/g, '""');
+      return `"${str}"`;
+    }
+
+    function exportHistoryToCSV() {
+      if (recordings.length === 0) {
+        alert('No saved records to export.');
+        return;
+      }
+
+      const headers = [
+        'Date',
+        'StudentName',
+        'Topic',
+        'Duration(sec)',
+        'Words',
+        'WPM',
+        'TargetWords',
+        'Language',
+        'SelfScore',
+        'HasAudio',
+        'Content',
+        'Fluency',
+        'Pronunciation',
+        'Vocabulary',
+        'Grammar',
+        'Note',
+        'Transcript'
+      ];
+
+      const rows = recordings.map(rec => [
+        rec.date,
+        escapeCsv(rec.studentName || ''),
+        escapeCsv(rec.topic || ''),
+        rec.duration,
+        rec.words,
+        rec.wpm,
+        rec.targetWords || '',
+        rec.language || '',
+        rec.selfScore || '',
+        rec.hasAudio ? 'Yes' : 'No',
+        rec.scores?.content ?? '',
+        rec.scores?.fluency ?? '',
+        rec.scores?.pronunciation ?? '',
+        rec.scores?.vocabulary ?? '',
+        rec.scores?.grammar ?? '',
+        escapeCsv(rec.note || ''),
+        escapeCsv(rec.transcript || '')
+      ]);
+
+      const bom = '\uFEFF';
+      const csvContent = bom + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'speech_practice_history.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function exportHistoryToJSON() {
+      try {
+        if (recordings.length === 0) {
+          alert('No saved records to export.');
+          return;
+        }
+
+        const exportData = await Promise.all(recordings.map(async (rec) => {
+          const copy = { ...rec };
+          if (copy.hasAudio && copy.audioId != null) {
+            const blob = await getAudioBlob(copy.audioId);
+            if (blob) {
+              copy.audioDataUrl = await blobToDataUrl(blob);
+            }
+          }
+          return copy;
+        }));
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'speech_practice_saved_data.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        alert('Could not prepare the practice data file.');
+      }
+    }
+
+    function importHistoryFromJSON(file) {
+      const reader = new FileReader();
+
+      reader.onload = async () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (!Array.isArray(data)) {
+            alert('This file is not a valid practice data file.');
+            return;
+          }
+
+          const normalized = data.map(rec => ({
+            ...rec,
+            id: normalizeAudioId(rec.id),
+            audioId: normalizeAudioId(rec.audioId ?? rec.id),
+            hasAudio: Boolean(rec.hasAudio || rec.audioDataUrl)
+          }));
+
+          await clearAllAudioBlobs();
+
+          for (const rec of normalized) {
+            if (rec.audioDataUrl) {
+              const blob = dataUrlToBlob(rec.audioDataUrl);
+              await saveAudioBlob(rec.audioId, blob);
+              delete rec.audioDataUrl;
+            }
+          }
+
+          recordings = normalized;
+          saveHistoryToLocalStorage();
+          renderRecordings();
+          alert('Practice data loaded.');
+        } catch (e) {
+          console.error(e);
+          alert('Could not load the practice data file.');
+        }
+      };
+
+      reader.readAsText(file);
+    }
+
+    async function hydrateSavedAudioPlayers() {
+      const players = Array.from(document.querySelectorAll('audio[data-audio-id]'));
+
+      for (const player of players) {
+        const audioId = normalizeAudioId(player.dataset.audioId);
+        const statusEl = document.querySelector(`[data-audio-status="${CSS.escape(audioId)}"]`);
+
+        try {
+          const blob = await getAudioBlob(audioId);
+          if (!blob) {
+            if (statusEl) statusEl.textContent = 'Audio file not found.';
+            continue;
+          }
+
+          const url = URL.createObjectURL(blob);
+          renderedAudioUrls.push(url);
+          player.src = url;
+          if (statusEl) statusEl.textContent = 'Saved audio ready.';
+        } catch (e) {
+          console.error(e);
+          if (statusEl) statusEl.textContent = 'Could not load audio.';
+        }
+      }
+    }
+
+    window.downloadRecordingAudio = async function(id) {
+      if (isAppClosing) return;
+
+      try {
+        const recordId = normalizeAudioId(id);
+        const rec = recordings.find(r => normalizeAudioId(r.id) === recordId);
+
+        if (!rec?.hasAudio) {
+          alert('No audio available for this record.');
+          return;
+        }
+
+        const blob = await getAudioBlob(rec.audioId);
+        if (!blob) {
+          alert('Audio file not found.');
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const ext = getAudioExtensionFromMimeType(blob.type);
+        const safeStudent = (rec.studentName || 'student').replace(/[\\/:*?"<>|]+/g, '_');
+        const safeDate = (rec.date || new Date().toISOString()).replace(/[:.]/g, '-');
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeStudent}_${safeDate}.${ext}`;
+        a.click();
+
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        alert('Could not download the audio.');
+      }
+    };
+
+    // Events
+    timeSelect.addEventListener('change', (e) => {
+      timeLimit = Number(e.target.value);
+      if (!isRecording) {
+        timeLeft = timeLimit;
+        updateTimerUI();
+      }
+    });
+
+    targetWordsInput.addEventListener('input', () => {
+      targetDisplayEl.textContent = getCurrentTarget();
+      updateLiveStats(getCurrentTranscript());
+    });
+
+    langSelect.addEventListener('change', () => {
+      if (recognition && !isRecording && !stopRequested && !isAppClosing) {
+        recognition.lang = langSelect.value;
+      }
+    });
+
+    [scoreContent, scoreFluency, scorePronunciation, scoreVocabulary, scoreGrammar].forEach(el => {
+      el.addEventListener('change', updateSelfScoreUI);
+    });
+
+    resetLiveBtn.addEventListener('click', () => {
+      if (isRecording || stopRequested || isAppClosing) return;
+      resetTranscriptArea();
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      if (isAppClosing) return;
+
+      const text = getCurrentTranscript();
+      if (!text) return;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyBtn.innerHTML = '<i data-lucide="copy" class="mr-2 w-5 h-5"></i> Copy';
+          lucide.createIcons();
+        }, 1200);
+      } catch (e) {
+        console.error(e);
+      }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (isAppClosing) return;
+
+      const text = getCurrentTranscript();
+      if (!text) return;
+
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'speech_transcript.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    exportCsvBtn.addEventListener('click', exportHistoryToCSV);
+    exportJsonBtn.addEventListener('click', exportHistoryToJSON);
+
+    importJsonInput.addEventListener('change', (e) => {
+      if (isAppClosing) return;
+
+      const file = e.target.files?.[0];
+      if (file) importHistoryFromJSON(file);
+      e.target.value = '';
+    });
+
+    clearHistoryBtn.addEventListener('click', async () => {
+      if (isAppClosing) return;
+
+      if (!confirm('保存履歴をすべて削除しますか？')) return;
+
+      try {
+        recordings = [];
+        saveHistoryToLocalStorage();
+        await clearAllAudioBlobs();
+        renderRecordings();
+      } catch (e) {
+        console.error(e);
+        alert('Could not clear all saved data.');
+      }
+    });
+
+    saveReviewBtn.addEventListener('click', async () => {
+      if (isAppClosing) return;
+
+      if (stopRequested) {
+        alert('Transcript is still being finalized. Please wait a moment.');
+        return;
+      }
+
+      if (!latestDraftRecording) {
+        alert('No latest review to save.');
+        return;
+      }
+
+      const finalRecord = buildRecordingObjectFromDraft();
+      if (!finalRecord || !finalRecord.transcript) {
+        alert('No transcript available to save.');
+        return;
+      }
+
+      try {
+        if (finalRecord.hasAudio && latestReviewAudioBlob) {
+          await saveAudioBlob(finalRecord.audioId, latestReviewAudioBlob);
+        }
+
+        addRecordingToHistory(finalRecord);
+        clearLatestReview();
+        alert('Review saved.');
+      } catch (e) {
+        console.error(e);
+        alert('Could not save the review audio.');
+      }
+    });
+
+    discardLatestBtn.addEventListener('click', () => {
+      if (stopRequested || isAppClosing) return;
+      clearLatestReview();
+    });
+
+    searchInput.addEventListener('input', renderRecordings);
+    sortSelect.addEventListener('change', renderRecordings);
+
+    startBtn.addEventListener('click', async () => {
+      if (isAppClosing) return;
+
+      if (stopRequested) {
+        alert('Please wait. The previous transcript is still being finalized.');
+        return;
+      }
+
+      hideError();
+
+      try {
+        if (!globalAudioStream) {
+          globalAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          micStatus.classList.remove('hidden');
+        }
+
+        mediaRecorder = new MediaRecorder(globalAudioStream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (isAppClosing) return;
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          if (isAppClosing) return;
+
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          pendingAudioBlob = audioBlob;
+          pendingAudioUrl = URL.createObjectURL(audioBlob);
+          pendingReady.audio = true;
+          maybeFinalizeLatestReview();
+        };
+
+        finalTranscript = '';
+        interimTranscript = '';
+        liveTranscriptText.innerHTML = '<span class="text-indigo-400 italic">Listening to your voice...</span>';
+
+        timeLeft = timeLimit;
+        isRecording = true;
+        recordingStartTime = Date.now();
+        lastSessionDuration = 0;
+
+        timeSelect.disabled = true;
+        langSelect.disabled = true;
+
+        startBtn.classList.add('hidden');
+        startBtn.classList.remove('flex');
+        stopBtn.classList.remove('hidden');
+        stopBtn.classList.add('flex');
+        recordingIndicator.classList.remove('hidden');
+
+        updateTimerUI();
+        resetLiveStats();
+
+        mediaRecorder.start();
+
+        if (recognition) {
+          recognition.lang = langSelect.value;
+          try {
+            recognition.start();
+          } catch (e) {
+            console.log('Recognition already started');
+          }
+        }
+
+        timerInterval = setInterval(() => {
+          if (isAppClosing) return;
+
+          timeLeft--;
+          updateLiveStats(getCurrentTranscript());
+
+          if (timeLeft <= 0) {
+            timeLeft = 0;
+            updateTimerUI();
+            stopRecording();
+          } else {
+            updateTimerUI();
+          }
+        }, 1000);
+      } catch (err) {
+        console.error('Error accessing microphone:', err);
+        showError('マイクを使用できません。システムやブラウザのマイク許可設定を確認してください。');
+      }
+    });
+
+    function stopRecording() {
+      if (isAppClosing) return;
+      if (!isRecording) return;
+
+      lastSessionDuration = recordingStartTime
+        ? Math.max(1, Math.floor((Date.now() - recordingStartTime) / 1000))
+        : 1;
+
+      isRecording = false;
+      beginFinalizeReview();
+
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+
+      if (recognition) {
+        recognition.stop();
+      }
+
+      clearInterval(timerInterval);
+
+      timeSelect.disabled = false;
+      langSelect.disabled = false;
+
+      startBtn.classList.remove('hidden');
+      startBtn.classList.add('flex');
+      stopBtn.classList.add('hidden');
+      stopBtn.classList.remove('flex');
+      recordingIndicator.classList.add('hidden');
+
+      timeLeft = timeLimit;
+      updateTimerUI();
+      updateLiveStats(getCurrentTranscript());
+
+      recordingStartTime = null;
+    }
+
+    stopBtn.addEventListener('click', stopRecording);
+
+    window.deleteRecording = async function(id) {
+      if (isAppClosing) return;
+
+      try {
+        const recordId = normalizeAudioId(id);
+        const rec = recordings.find(r => normalizeAudioId(r.id) === recordId);
+        recordings = recordings.filter(r => normalizeAudioId(r.id) !== recordId);
+        saveHistoryToLocalStorage();
+
+        if (rec?.hasAudio && rec.audioId != null) {
+          await deleteAudioBlob(rec.audioId);
+        }
+
+        renderRecordings();
+      } catch (e) {
+        console.error(e);
+        alert('Could not delete the recording.');
+      }
+    };
+
+    window.copyHistoryTranscript = async function(id) {
+      if (isAppClosing) return;
+
+      const recordId = normalizeAudioId(id);
+      const rec = recordings.find(r => normalizeAudioId(r.id) === recordId);
+      if (!rec?.transcript) return;
+
+      try {
+        await navigator.clipboard.writeText(rec.transcript);
+        alert('Transcript copied.');
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    async function renderRecordings() {
+      if (isAppClosing) return;
+
+      updateSavedCount();
+
+      const view = getFilteredAndSortedRecordings();
+
+      if (view.length === 0) {
+        clearRenderedAudioUrls();
+        emptyState.classList.remove('hidden');
+        recordingsList.innerHTML = '';
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      clearRenderedAudioUrls();
+
+      recordingsList.innerHTML = view.map((rec) => {
+        const recordId = normalizeAudioId(rec.id);
+        const audioId = normalizeAudioId(rec.audioId);
+
+        const studentNameHtml = rec.studentName ? escapeHtml(rec.studentName) : '-';
+        const topicHtml = rec.topic ? escapeHtml(rec.topic) : '-';
+
+        const transcriptHtml = rec.transcript
+          ? escapeHtml(rec.transcript)
+          : '<span class="italic text-gray-400">No transcript available.</span>';
+
+        const noteHtml = rec.note
+          ? escapeHtml(rec.note)
+          : '<span class="text-gray-400 italic">No memo</span>';
+
+        const audioBlockHtml = rec.hasAudio
+          ? `
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <div class="text-xs uppercase text-gray-400 font-semibold mb-2">Saved Audio</div>
+              <audio controls preload="none" data-audio-id="${audioId}" class="w-full"></audio>
+              <div data-audio-status="${audioId}" class="text-xs text-gray-400 mt-2">Loading audio...</div>
+            </div>
+          `
+          : `
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <div class="text-xs uppercase text-gray-400 font-semibold mb-1">Saved Audio</div>
+              <div class="text-sm text-gray-400 italic">No audio saved</div>
+            </div>
+          `;
+
+        return `
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col space-y-4 hover:shadow-md transition-shadow">
+            <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 border-b border-gray-100 pb-3">
+              <div class="flex flex-wrap items-center text-sm font-medium text-gray-600 gap-3">
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-gray-800">${formatDateTime(rec.date)}</span>
+                <span class="flex items-center"><i data-lucide="user" class="w-4 h-4 mr-1.5"></i> ${studentNameHtml}</span>
+                <span class="flex items-center"><i data-lucide="message-square" class="w-4 h-4 mr-1.5"></i> ${topicHtml}</span>
+                <span class="flex items-center"><i data-lucide="clock" class="w-4 h-4 mr-1.5"></i> ${formatTime(rec.duration)}</span>
+                <span class="flex items-center"><i data-lucide="type" class="w-4 h-4 mr-1.5"></i> ${rec.words} words</span>
+                <span class="flex items-center"><i data-lucide="gauge" class="w-4 h-4 mr-1.5"></i> ${rec.wpm} WPM</span>
+                <span class="flex items-center"><i data-lucide="target" class="w-4 h-4 mr-1.5"></i> ${rec.targetWords ?? '-'}</span>
+                <span class="flex items-center"><i data-lucide="badge-check" class="w-4 h-4 mr-1.5"></i> ${rec.selfScore ?? '-'} / 25</span>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <button onclick="copyHistoryTranscript('${recordId}')" class="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg">
+                  Copy
+                </button>
+                ${rec.hasAudio ? `
+                  <button onclick="downloadRecordingAudio('${recordId}')" class="text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-2 rounded-lg">
+                    Download Audio
+                  </button>
+                ` : ''}
+                <button onclick="deleteRecording('${recordId}')" class="text-sm bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg">
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div class="lg:col-span-2">
+                <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Transcript</h4>
+                <div class="bg-gray-50 p-4 rounded-lg text-gray-700 text-base leading-relaxed border border-gray-100 whitespace-pre-wrap">${transcriptHtml}</div>
+              </div>
+
+              <div class="space-y-3">
+                ${audioBlockHtml}
+
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div class="text-xs uppercase text-gray-400 font-semibold mb-1">Self Evaluation</div>
+                  <div class="text-sm text-gray-700 leading-7">
+                    Content: ${rec.scores?.content ?? '-'}<br>
+                    Fluency: ${rec.scores?.fluency ?? '-'}<br>
+                    Pronunciation: ${rec.scores?.pronunciation ?? '-'}<br>
+                    Vocabulary: ${rec.scores?.vocabulary ?? '-'}<br>
+                    Grammar: ${rec.scores?.grammar ?? '-'}
+                  </div>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div class="text-xs uppercase text-gray-400 font-semibold mb-1">Reflection / Memo</div>
+                  <div class="text-sm text-gray-700 whitespace-pre-wrap">${noteHtml}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+      await hydrateSavedAudioPlayers();
+    }
+
+    // App close / unload cleanup
+    window.addEventListener('load', startAppHeartbeat);
+    window.addEventListener('pageshow', startAppHeartbeat);
+    window.addEventListener('pagehide', handleAppClosingSignal);
+    window.addEventListener('beforeunload', handleAppClosingSignal);
+    window.addEventListener('unload', cleanupAppResources);
+
+    recordings = loadHistoryFromLocalStorage();
+
+    updateTimerUI();
+    resetLiveStats();
+    updateSelfScoreUI();
+    renderRecordings();
+    setFinalizeUiState(false);
+  </script>
+</body>
+</html>
