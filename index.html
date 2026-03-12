@@ -379,14 +379,13 @@
     timerCircle.style.strokeDashoffset = 0;
     lucide.createIcons();
 
-    // ★ブラッシュアップ適用: iPadで確実にmp4(m4a)になるよう優先順位を変更
     function getSupportedMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
       const types = [
-        'audio/mp4',             // 1. Safari/iPad 優先 (m4aへ)
-        'audio/aac',             // 2. Safari/iPad 優先 (aacへ)
-        'audio/webm;codecs=opus',// 3. Chrome/Edge (webmへ)
-        'audio/webm',            // 4. Chrome/Edge (webmへ)
+        'audio/mp4',             
+        'audio/aac',             
+        'audio/webm;codecs=opus',
+        'audio/webm',            
         'audio/ogg;codecs=opus'
       ];
       for (const type of types) {
@@ -1029,6 +1028,116 @@
       }
     }
 
+    // ★復元: CSV出力機能
+    function escapeCsv(value) {
+      const str = String(value ?? '').replace(/"/g, '""');
+      return `"${str}"`;
+    }
+
+    function exportHistoryToCSV() {
+      if (recordings.length === 0) {
+        alert('No saved records to export.');
+        return;
+      }
+      const headers = [
+        'Date', 'StudentName', 'Topic', 'Duration(sec)', 'Words', 'WPM',
+        'TargetWords', 'Language', 'SelfScore', 'HasAudio', 'Content',
+        'Fluency', 'Pronunciation', 'Vocabulary', 'Grammar', 'Note', 'Transcript'
+      ];
+      const rows = recordings.map(rec => [
+        rec.date, escapeCsv(rec.studentName || ''), escapeCsv(rec.topic || ''), rec.duration,
+        rec.words, rec.wpm, rec.targetWords || '', rec.language || '', rec.selfScore || '',
+        rec.hasAudio ? 'Yes' : 'No', rec.scores?.content ?? '', rec.scores?.fluency ?? '',
+        rec.scores?.pronunciation ?? '', rec.scores?.vocabulary ?? '', rec.scores?.grammar ?? '',
+        escapeCsv(rec.note || ''), escapeCsv(rec.transcript || '')
+      ]);
+      const bom = '\uFEFF';
+      const csvContent = bom + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'speech_practice_history.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ★復元: JSON出力機能 (音声ファイルも含めてバックアップ)
+    async function exportHistoryToJSON() {
+      try {
+        if (recordings.length === 0) {
+          alert('No saved records to export.');
+          return;
+        }
+        const exportData = await Promise.all(recordings.map(async (rec) => {
+          const copy = { ...rec };
+          if (copy.hasAudio && copy.audioId != null) {
+            const blob = await getAudioBlob(copy.audioId);
+            if (blob) {
+              copy.audioDataUrl = await blobToDataUrl(blob);
+            }
+          }
+          return copy;
+        }));
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'speech_practice_saved_data.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        alert('Could not prepare the practice data file.');
+      }
+    }
+
+    // ★復元: JSON読み込み機能
+    function importHistoryFromJSON(file) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (!Array.isArray(data)) {
+            alert('This file is not a valid practice data file.');
+            return;
+          }
+          const normalized = data.map(rec => ({
+            ...rec,
+            id: normalizeAudioId(rec.id),
+            audioId: normalizeAudioId(rec.audioId ?? rec.id),
+            hasAudio: Boolean(rec.hasAudio || rec.audioDataUrl)
+          }));
+          await clearAllAudioBlobs();
+          for (const rec of normalized) {
+            if (rec.audioDataUrl) {
+              const blob = dataUrlToBlob(rec.audioDataUrl);
+              await saveAudioBlob(rec.audioId, blob);
+              delete rec.audioDataUrl;
+            }
+          }
+          recordings = normalized;
+          saveHistoryToLocalStorage();
+          renderRecordings();
+          alert('Practice data loaded.');
+        } catch (e) {
+          console.error(e);
+          alert('Could not load the practice data file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // ★復元: CSV/JSONボタンのイベントリスナー
+    exportCsvBtn.addEventListener('click', exportHistoryToCSV);
+    exportJsonBtn.addEventListener('click', exportHistoryToJSON);
+    importJsonInput.addEventListener('change', (e) => {
+      if (isAppClosing) return;
+      const file = e.target.files?.[0];
+      if (file) importHistoryFromJSON(file);
+      e.target.value = '';
+    });
+
     async function renderRecordings() {
       savedCountEl.textContent = recordings.length;
       const query = searchInput.value.trim().toLowerCase();
@@ -1056,7 +1165,6 @@
       recordingsList.innerHTML = view.map(rec => {
         const rId = normalizeAudioId(rec.id);
         const aId = normalizeAudioId(rec.audioId);
-        // ★ブラッシュアップ適用: controlsList="nodownload" でプレイヤーからのDLを非表示
         const hasAudioHtml = rec.hasAudio ? `
           <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
             <div class="text-xs uppercase text-gray-400 font-semibold mb-2">Saved Audio</div>
