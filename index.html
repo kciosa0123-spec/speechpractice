@@ -34,13 +34,19 @@
     </div>
 
     <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-8 border border-gray-100">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
+        <div class="md:col-span-3">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Student Number</label>
+          <input id="student-number" type="text" placeholder="e.g. 12345"
+            class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="md:col-span-4">
           <label class="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
           <input id="student-name" type="text" placeholder="e.g. Taro Yamada"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
-        <div>
+        <div class="md:col-span-5">
           <label class="block text-sm font-semibold text-gray-700 mb-2">Topic / Prompt</label>
           <input id="speech-topic" type="text" placeholder="e.g. My favorite place in Kyoto"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -292,7 +298,7 @@
   </div>
 
   <script>
-    const STORAGE_KEY = 'speechPracticeEducation_v10';
+    const STORAGE_KEY = 'speechPracticeEducation_v11';
     const AUDIO_DB_NAME = 'speechPracticeEducationAudioDB';
     const AUDIO_STORE_NAME = 'audioRecordings';
     const AUDIO_DB_VERSION = 1;
@@ -330,6 +336,7 @@
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
     // DOM Elements
+    const studentNumberInput = document.getElementById('student-number'); // ★追加
     const timeSelect = document.getElementById('time-select');
     const targetWordsInput = document.getElementById('target-words');
     const langSelect = document.getElementById('lang-select');
@@ -379,7 +386,6 @@
     timerCircle.style.strokeDashoffset = 0;
     lucide.createIcons();
 
-    // ★修正: WindowsとAndroidの場合はWebMを優先、iPad/Mac等の場合はMP4を優先
     function getSupportedMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
       
@@ -946,6 +952,7 @@
       if (stopRequested || !latestDraftRecording) return;
       const finalRecord = {
         ...latestDraftRecording,
+        studentNumber: studentNumberInput.value.trim(), // ★追加
         studentName: studentNameInput.value.trim(),
         topic: speechTopicInput.value.trim(),
         targetWords: getCurrentTarget(),
@@ -998,10 +1005,13 @@
         
         const url = URL.createObjectURL(blob);
         const ext = getAudioExtensionFromMimeType(blob.type);
-        const safeStudent = (rec.studentName || 'student').replace(/[\\/:*?"<>|]+/g, '_');
+        // ダウンロード時のファイル名にも学籍番号を含める
+        const namePart = rec.studentName || 'student';
+        const numPart = rec.studentNumber ? `_${rec.studentNumber}` : '';
+        const safeName = `${namePart}${numPart}`.replace(/[\\/:*?"<>|]+/g, '_');
         const safeDate = (rec.date || new Date().toISOString()).replace(/[:.]/g, '-');
         const a = document.createElement('a');
-        a.href = url; a.download = `${safeStudent}_${safeDate}.${ext}`;
+        a.href = url; a.download = `${safeName}_${safeDate}.${ext}`;
         a.click(); URL.revokeObjectURL(url);
       } catch (e) { alert('Could not download the audio.'); }
     };
@@ -1044,7 +1054,7 @@
       }
     }
 
-    // CSV出力機能
+    // CSV出力機能 ★修正: Student Numberを先頭付近に追加
     function escapeCsv(value) {
       const str = String(value ?? '').replace(/"/g, '""');
       return `"${str}"`;
@@ -1056,12 +1066,12 @@
         return;
       }
       const headers = [
-        'Date', 'StudentName', 'Topic', 'Duration(sec)', 'Words', 'WPM',
+        'Date', 'StudentNumber', 'StudentName', 'Topic', 'Duration(sec)', 'Words', 'WPM',
         'TargetWords', 'Language', 'SelfScore', 'HasAudio', 'Content',
         'Fluency', 'Pronunciation', 'Vocabulary', 'Grammar', 'Note', 'Transcript'
       ];
       const rows = recordings.map(rec => [
-        rec.date, escapeCsv(rec.studentName || ''), escapeCsv(rec.topic || ''), rec.duration,
+        rec.date, escapeCsv(rec.studentNumber || ''), escapeCsv(rec.studentName || ''), escapeCsv(rec.topic || ''), rec.duration,
         rec.words, rec.wpm, rec.targetWords || '', rec.language || '', rec.selfScore || '',
         rec.hasAudio ? 'Yes' : 'No', rec.scores?.content ?? '', rec.scores?.fluency ?? '',
         rec.scores?.pronunciation ?? '', rec.scores?.vocabulary ?? '', rec.scores?.grammar ?? '',
@@ -1158,7 +1168,8 @@
       const query = searchInput.value.trim().toLowerCase();
       let view = recordings.filter(rec => !query || 
         (rec.studentName || '').toLowerCase().includes(query) || (rec.topic || '').toLowerCase().includes(query) || 
-        (rec.transcript || '').toLowerCase().includes(query) || (rec.note || '').toLowerCase().includes(query)
+        (rec.transcript || '').toLowerCase().includes(query) || (rec.note || '').toLowerCase().includes(query) ||
+        (rec.studentNumber || '').toLowerCase().includes(query) // ★追加: 学籍番号でも検索可能に
       );
       
       const sortValue = sortSelect.value;
@@ -1188,12 +1199,19 @@
           </div>
         ` : `<div class="bg-gray-50 border border-gray-200 rounded-lg p-3"><div class="text-sm text-gray-400 italic">No audio saved</div></div>`;
         
+        // ★追加: 名前と番号の表示を結合
+        const sNumHtml = rec.studentNumber ? escapeHtml(rec.studentNumber) : '';
+        const sNameHtml = rec.studentName ? escapeHtml(rec.studentName) : '-';
+        const displayNameHtml = sNumHtml 
+          ? `<span class="text-gray-500 font-normal mr-1">#${sNumHtml}</span>${sNameHtml}`
+          : sNameHtml;
+
         return `
           <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col space-y-4">
             <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 border-b border-gray-100 pb-3">
               <div class="flex flex-wrap items-center text-sm font-medium text-gray-600 gap-3">
                 <span class="bg-gray-100 px-3 py-1 rounded-full">${formatDateTime(rec.date)}</span>
-                <span class="flex items-center"><i data-lucide="user" class="w-4 h-4 mr-1"></i>${escapeHtml(rec.studentName) || '-'}</span>
+                <span class="flex items-center"><i data-lucide="user" class="w-4 h-4 mr-1.5"></i> ${displayNameHtml}</span>
                 <span class="flex items-center"><i data-lucide="type" class="w-4 h-4 mr-1"></i>${rec.words} words</span>
                 <span class="flex items-center"><i data-lucide="gauge" class="w-4 h-4 mr-1"></i>${rec.wpm} WPM</span>
               </div>
