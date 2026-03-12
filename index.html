@@ -191,7 +191,7 @@
               </h3>
               <div id="latest-review-meta" class="text-sm text-gray-500"></div>
             </div>
-            <audio id="latest-audio-player" controls class="w-full mb-4"></audio>
+            <audio id="latest-audio-player" controls controlsList="nodownload" class="w-full mb-4"></audio>
             <div class="mb-4">
               <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Transcript for Review (Final)</h4>
               <div id="latest-review-text" class="bg-gray-50 p-4 rounded-lg text-gray-700 text-base leading-relaxed border border-gray-100 whitespace-pre-wrap">
@@ -379,14 +379,15 @@
     timerCircle.style.strokeDashoffset = 0;
     lucide.createIcons();
 
+    // ★ブラッシュアップ適用: iPadで確実にmp4(m4a)になるよう優先順位を変更
     function getSupportedMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
       const types = [
-        'audio/webm;codecs=opus',
-        'audio/mp4',   
-        'audio/aac',   
-        'audio/ogg;codecs=opus',
-        'audio/webm'
+        'audio/mp4',             // 1. Safari/iPad 優先 (m4aへ)
+        'audio/aac',             // 2. Safari/iPad 優先 (aacへ)
+        'audio/webm;codecs=opus',// 3. Chrome/Edge (webmへ)
+        'audio/webm',            // 4. Chrome/Edge (webmへ)
+        'audio/ogg;codecs=opus'
       ];
       for (const type of types) {
         if (MediaRecorder.isTypeSupported(type)) {
@@ -1055,10 +1056,11 @@
       recordingsList.innerHTML = view.map(rec => {
         const rId = normalizeAudioId(rec.id);
         const aId = normalizeAudioId(rec.audioId);
+        // ★ブラッシュアップ適用: controlsList="nodownload" でプレイヤーからのDLを非表示
         const hasAudioHtml = rec.hasAudio ? `
           <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
             <div class="text-xs uppercase text-gray-400 font-semibold mb-2">Saved Audio</div>
-            <audio controls preload="none" data-audio-id="${aId}" class="w-full"></audio>
+            <audio controls controlsList="nodownload" preload="none" data-audio-id="${aId}" class="w-full"></audio>
             <div data-audio-status="${aId}" class="text-xs text-gray-400 mt-2">Loading audio...</div>
           </div>
         ` : `<div class="bg-gray-50 border border-gray-200 rounded-lg p-3"><div class="text-sm text-gray-400 italic">No audio saved</div></div>`;
