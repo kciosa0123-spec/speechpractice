@@ -308,7 +308,7 @@
     let mediaRecorder = null;
     let recognition = null;
     let globalAudioStream = null;
-    let currentMimeType = ''; // ★追加：ブラウザ対応のMIMEタイプを保持
+    let currentMimeType = ''; 
 
     let recordingStartTime = null;
     let lastSessionDuration = 0;
@@ -379,13 +379,12 @@
     timerCircle.style.strokeDashoffset = 0;
     lucide.createIcons();
 
-    // ★追加：ブラウザがサポートするMIMEタイプを判別（iPad/iOS対応）
     function getSupportedMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
       const types = [
         'audio/webm;codecs=opus',
-        'audio/mp4',   // Safari/iOS
-        'audio/aac',   // Safari/iOS fallback
+        'audio/mp4',   
+        'audio/aac',   
         'audio/ogg;codecs=opus',
         'audio/webm'
       ];
@@ -394,7 +393,7 @@
           return type;
         }
       }
-      return ''; // ブラウザのデフォルトに任せる
+      return ''; 
     }
 
     function getCurrentTranscript() {
@@ -407,9 +406,9 @@
 
     function getAudioExtensionFromMimeType(mimeType = '') {
       const map = {
-        'audio/webm': 'weba',
-        'audio/webm;codecs=opus': 'weba',
-        'audio/mp4': 'm4a',
+        'audio/webm': 'webm', 
+        'audio/webm;codecs=opus': 'webm',
+        'audio/mp4': 'm4a',   
         'audio/aac': 'aac',
         'audio/mpeg': 'mp3',
         'audio/mp3': 'mp3',
@@ -417,7 +416,7 @@
         'audio/ogg': 'ogg',
         'audio/ogg;codecs=opus': 'ogg'
       };
-      return map[mimeType] || 'weba'; // デフォルト
+      return map[mimeType] || 'webm'; 
     }
 
     function escapeHtml(str = '') {
@@ -586,7 +585,7 @@
       finalizeTimer = setTimeout(() => {
         pendingReady.recognition = true;
         maybeFinalizeLatestReview();
-      }, 1500); // 念のため長めに待つ
+      }, 1500); 
     }
 
     function maybeFinalizeLatestReview() {
@@ -619,7 +618,6 @@
       setFinalizeUiState(false);
     }
 
-    // ★修正：SpeechRecognitionの設定とエラーハンドリング強化
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (SpeechRecognition) {
@@ -650,7 +648,6 @@
         if (isAppClosing) return;
 
         if (isRecording) {
-          // ★修正：無音で自動停止した場合の再起動に、わずかな遅延を入れる（Chrome対策）
           setTimeout(() => {
             if (isRecording) {
               try {
@@ -814,7 +811,6 @@
       }
       hideError();
 
-      // ★修正：ユーザーアクションの直後に同期的に認識を開始する（Android対策）
       if (recognition) {
         recognition.lang = langSelect.value;
         try {
@@ -830,7 +826,6 @@
           micStatus.classList.remove('hidden');
         }
 
-        // ★修正：サポートされているMIMEタイプをセット（iPad対策）
         currentMimeType = getSupportedMimeType();
         const options = currentMimeType ? { mimeType: currentMimeType } : {};
         
@@ -843,7 +838,6 @@
 
         mediaRecorder.onstop = () => {
           if (isAppClosing) return;
-          // 録音フォーマットも実際のMIMEタイプに合わせる
           const audioBlob = new Blob(audioChunks, { type: currentMimeType || 'audio/webm' });
           pendingAudioBlob = audioBlob;
           pendingAudioUrl = URL.createObjectURL(audioBlob);
@@ -883,7 +877,6 @@
       } catch (err) {
         console.error('Error accessing microphone:', err);
         showError('マイクを使用できません。システムやブラウザのマイク許可設定を確認してください。');
-        // マイク取得エラー時は認識も止める
         if(recognition) recognition.stop();
       }
     });
@@ -914,7 +907,6 @@
     stopBtn.addEventListener('click', stopRecording);
     resetLiveBtn.addEventListener('click', () => { if (!isRecording && !stopRequested) resetTranscriptArea(); });
 
-    // その他、コピーやダウンロード、履歴の描画関連の関数群は元のコードと同じ動作を維持しています
     copyBtn.addEventListener('click', async () => {
       const text = getCurrentTranscript();
       if (text) {
