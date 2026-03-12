@@ -379,15 +379,31 @@
     timerCircle.style.strokeDashoffset = 0;
     lucide.createIcons();
 
+    // ★修正: WindowsとAndroidの場合はWebMを優先、iPad/Mac等の場合はMP4を優先
     function getSupportedMimeType() {
       if (typeof MediaRecorder === 'undefined') return '';
-      const types = [
-        'audio/mp4',             
-        'audio/aac',             
-        'audio/webm;codecs=opus',
-        'audio/webm',            
-        'audio/ogg;codecs=opus'
-      ];
+      
+      const isWinOrAndroid = /Windows|Android/.test(navigator.userAgent);
+      let types = [];
+
+      if (isWinOrAndroid) {
+        types = [
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/mp4',
+          'audio/aac',
+          'audio/ogg;codecs=opus'
+        ];
+      } else {
+        types = [
+          'audio/mp4',             
+          'audio/aac',             
+          'audio/webm;codecs=opus',
+          'audio/webm',            
+          'audio/ogg;codecs=opus'
+        ];
+      }
+
       for (const type of types) {
         if (MediaRecorder.isTypeSupported(type)) {
           return type;
@@ -1028,7 +1044,7 @@
       }
     }
 
-    // ★復元: CSV出力機能
+    // CSV出力機能
     function escapeCsv(value) {
       const str = String(value ?? '').replace(/"/g, '""');
       return `"${str}"`;
@@ -1062,7 +1078,7 @@
       URL.revokeObjectURL(url);
     }
 
-    // ★復元: JSON出力機能 (音声ファイルも含めてバックアップ)
+    // JSON出力機能
     async function exportHistoryToJSON() {
       try {
         if (recordings.length === 0) {
@@ -1092,7 +1108,7 @@
       }
     }
 
-    // ★復元: JSON読み込み機能
+    // JSON読み込み機能
     function importHistoryFromJSON(file) {
       const reader = new FileReader();
       reader.onload = async () => {
@@ -1128,7 +1144,6 @@
       reader.readAsText(file);
     }
 
-    // ★復元: CSV/JSONボタンのイベントリスナー
     exportCsvBtn.addEventListener('click', exportHistoryToCSV);
     exportJsonBtn.addEventListener('click', exportHistoryToJSON);
     importJsonInput.addEventListener('change', (e) => {
