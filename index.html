@@ -407,6 +407,9 @@
     let transcriptPaused = false;
     let recognitionErrorShown = false;
     let usingOnDevice = false;
+    let recognitionGotResult = false;
+    let onDeviceUnusable = false;
+    let onDeviceWatchdogTimer = null;
 
     const CIRCLE_RADIUS = 88;
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -683,6 +686,7 @@
 
       clearTimeout(finalizeTimer);
       clearTimeout(audioFinalizeTimer);
+      clearTimeout(onDeviceWatchdogTimer);
       clearInterval(timerInterval);
       revokeCachedAudioUrls();
       stopRequested = false;
@@ -772,83 +776,115 @@
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (SpeechRecognition) {
-      recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = langSelect.value;
-
-      recognition.onresult = (event) => {
-        if (isAppClosing) return;
-        recognitionNetworkErrors = 0;
-        if (recognitionErrorShown) { hideError(); recognitionErrorShown = false; }
-        interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const chunk = event.results[i][0].transcript.trim();
-          if (event.results[i].isFinal) {
-            finalTranscript += (finalTranscript ? ' ' : '') + chunk;
-          } else {
-            interimTranscript += (interimTranscript ? ' ' : '') + chunk;
-          }
+    function handleRecognitionResult(event) {
+      if (isAppClosing || event.target !== recognition) return;
+      recognitionGotResult = true;
+      recognitionNetworkErrors = 0;
+      if (recognitionErrorShown) { hideError(); recognitionErrorShown = false; }
+      interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const chunk = event.results[i][0].transcript.trim();
+        if (event.results[i].isFinal) {
+          finalTranscript += (finalTranscript ? ' ' : '') + chunk;
+        } else {
+          interimTranscript += (interimTranscript ? ' ' : '') + chunk;
         }
+      }
 
-        const currentText = getCurrentTranscript();
-        liveTranscriptText.textContent = currentText || '';
-        if (!currentText) liveTranscriptText.innerHTML = '<span class="text-indigo-400 italic">Listening to your voice...</span>';
-        updateLiveStats(currentText);
-      };
+      const currentText = getCurrentTranscript();
+      liveTranscriptText.textContent = currentText || '';
+      if (!currentText) liveTranscriptText.innerHTML = '<span class="text-indigo-400 italic">Listening to your voice...</span>';
+      updateLiveStats(currentText);
+    }
 
-      recognition.onend = () => {
-        if (isAppClosing) return;
+    function handleRecognitionEnd(event) {
+      if (isAppClosing || event.target !== recognition) return;
 
-        if (isRecording) {
-          // セッション切断時、未確定（interim）の文言を確定分へ引き継いで消失を防ぐ
-          if (interimTranscript) {
-            finalTranscript += (finalTranscript ? ' ' : '') + interimTranscript;
-            interimTranscript = '';
-          }
-          if (transcriptPaused) return;
-          if (recognitionNetworkErrors >= 5) {
-            transcriptPaused = true;
-            recognitionErrorShown = true;
-            showError('文字起こしを一時停止しました（録音は継続しています）。録音と保存はそのまま行えます。');
-            return;
-          }
-          const restartDelay = recognitionNetworkErrors === 0
-            ? 100
-            : Math.min(recognitionNetworkErrors, 4) * 1000;
-          setTimeout(() => {
-            if (isRecording && !transcriptPaused) {
-              try {
-                recognition.start();
-              } catch (e) {
-                console.warn('Recognition restart skipped or failed.', e);
-              }
-            }
-          }, restartDelay);
+      if (isRecording) {
+        // セッション切断時、未確定（interim）の文言を確定分へ引き継いで消失を防ぐ
+        if (interimTranscript) {
+          finalTranscript += (finalTranscript ? ' ' : '') + interimTranscript;
+          interimTranscript = '';
+        }
+        if (transcriptPaused) return;
+        if (recognitionNetworkErrors >= 5) {
+          transcriptPaused = true;
+          recognitionErrorShown = true;
+          showError('文字起こしを一時停止しました（録音は継続しています）。録音と保存はそのまま行えます。');
           return;
         }
+        const restartDelay = recognitionNetworkErrors === 0
+          ? 100
+          : Math.min(recognitionNetworkErrors, 4) * 1000;
+        setTimeout(() => {
+          if (isRecording && !transcriptPaused) {
+            try {
+              recognition.start();
+            } catch (e) {
+              console.warn('Recognition restart skipped or failed.', e);
+            }
+          }
+        }, restartDelay);
+        return;
+      }
 
-        pendingReady.recognition = true;
-        maybeFinalizeLatestReview();
-      };
+      pendingReady.recognition = true;
+      maybeFinalizeLatestReview();
+    }
 
-      recognition.onerror = (event) => {
-        if (isAppClosing) return;
-        console.warn('Speech recognition error:', event.error);
-        if (event.error === 'not-allowed') {
-          recognitionErrorShown = true;
-          showError('マイクへのアクセスが拒否されています。ブラウザの設定でマイクを許可してください。');
-        } else if (event.error === 'network') {
-          // 一時的な network エラーは自動再起動で復帰を試みるため、ここでは表示しない。
-          // 復帰できない場合のみ onend 側で一時停止メッセージを表示する。
-          recognitionNetworkErrors++;
-        } else if (usingOnDevice && (event.error === 'language-not-supported' || event.error === 'service-not-allowed')) {
-          // オンデバイス認識が利用できない場合はクラウドへ切り替え、onend の自動再起動に任せる
-          try { recognition.processLocally = false; } catch (e2) {}
-          usingOnDevice = false;
-        }
-      };
+    function handleRecognitionError(event) {
+      if (isAppClosing || event.target !== recognition) return;
+      console.warn('Speech recognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        recognitionErrorShown = true;
+        showError('マイクへのアクセスが拒否されています。ブラウザの設定でマイクを許可してください。');
+      } else if (event.error === 'network') {
+        // 一時的な network エラーは自動再起動で復帰を試みるため、ここでは表示しない。
+        // 復帰できない場合のみ onend 側で一時停止メッセージを表示する。
+        recognitionNetworkErrors++;
+      } else if (usingOnDevice && (event.error === 'language-not-supported' || event.error === 'service-not-allowed')) {
+        // オンデバイス認識が利用できない場合はクラウド認識へ切り替える
+        fallBackToCloudRecognition('on-device recognition error: ' + event.error);
+      }
+    }
+
+    function createRecognition() {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = langSelect.value;
+      rec.onresult = handleRecognitionResult;
+      rec.onend = handleRecognitionEnd;
+      rec.onerror = handleRecognitionError;
+      return rec;
+    }
+
+    function discardRecognition(rec) {
+      if (!rec) return;
+      rec.onresult = null;
+      rec.onend = null;
+      rec.onerror = null;
+      try { rec.abort(); } catch (e) {}
+    }
+
+    // オンデバイス認識が結果もエラーも返さず固まる事例への対処：
+    // 認識インスタンスを作り直してクラウド認識へ切り替える（以降このページではクラウド固定）
+    function fallBackToCloudRecognition(reason) {
+      console.warn('Falling back to cloud recognition:', reason || 'unspecified');
+      onDeviceUnusable = true;
+      usingOnDevice = false;
+      clearTimeout(onDeviceWatchdogTimer);
+      discardRecognition(recognition);
+      recognition = createRecognition();
+      try { recognition.processLocally = false; } catch (e) {}
+      if (isRecording) {
+        try { recognition.start(); } catch (e) { console.warn('Cloud fallback start failed.', e); }
+        updateMicStatus('recording');
+      }
+    }
+
+    if (SpeechRecognition) {
+      recognition = createRecognition();
     } else {
       showError('お使いのブラウザは音声認識機能をサポートしていません。Chrome、Edge等の対応ブラウザをご利用ください。');
     }
@@ -995,6 +1031,7 @@
       pendingReady = { audio: false, recognition: false };
       clearTimeout(finalizeTimer);
       clearTimeout(audioFinalizeTimer);
+      clearTimeout(onDeviceWatchdogTimer);
       clearInterval(timerInterval);
       recordingStartTime = null;
       lastSessionDuration = 0;
@@ -1016,6 +1053,10 @@
       if (!recognition) return;
       recognition.lang = langSelect.value;
       usingOnDevice = false;
+      if (onDeviceUnusable) {
+        try { recognition.processLocally = false; } catch (e) {}
+        return;
+      }
       const supportsOnDevice =
         'processLocally' in recognition &&
         typeof SpeechRecognition !== 'undefined' &&
@@ -1054,13 +1095,32 @@
       recognitionNetworkErrors = 0;
       transcriptPaused = false;
       recognitionErrorShown = false;
+      recognitionGotResult = false;
 
       if (recognition) {
         await configureRecognitionEngine();
         try {
           recognition.start();
         } catch (e) {
-          console.warn('Recognition start failed or already running.', e);
+          // 前回のセッションが終了せず残っている場合（InvalidStateError）はインスタンスを作り直す
+          console.warn('Recognition start failed; recreating the recognition instance.', e);
+          discardRecognition(recognition);
+          recognition = createRecognition();
+          await configureRecognitionEngine();
+          try {
+            recognition.start();
+          } catch (e2) {
+            console.warn('Recognition start failed again.', e2);
+          }
+        }
+        clearTimeout(onDeviceWatchdogTimer);
+        if (usingOnDevice) {
+          // オンデバイス認識が結果を一切返さない場合はクラウドへ自動切替
+          onDeviceWatchdogTimer = setTimeout(() => {
+            if (isRecording && usingOnDevice && !recognitionGotResult) {
+              fallBackToCloudRecognition('no results within 8s');
+            }
+          }, 8000);
         }
       }
 
@@ -1145,6 +1205,7 @@
       }
       if (recognition) recognition.stop();
       
+      clearTimeout(onDeviceWatchdogTimer);
       clearInterval(timerInterval);
 
       timeSelect.disabled = false; langSelect.disabled = false;
