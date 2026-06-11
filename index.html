@@ -410,10 +410,15 @@
     let recognitionErrorShown = false;
     let usingOnDevice = false;
     let recognitionGotResult = false;
-    let onDeviceUnusable = false;
+    // v12.8 safety default: start with cloud recognition.
+    // Chrome can report on-device recognition as available while the session silently hangs;
+    // add ?local=1 to the URL only when explicitly testing on-device recognition again.
+    let onDeviceUnusable = new URLSearchParams(window.location.search).get('local') !== '1';
     let onDeviceWatchdogTimer = null;
     let recognitionStartRetryTimer = null;
     let recognitionSessionId = 0;
+
+    console.info('English Speech Practice Education v12.8 loaded. On-device recognition is opt-in via ?local=1.');
 
     const CIRCLE_RADIUS = 88;
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
