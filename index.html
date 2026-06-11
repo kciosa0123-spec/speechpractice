@@ -404,6 +404,8 @@
     let isAppClosing = false;
 
     let recognitionNetworkErrors = 0;
+    let recognitionNoSpeechErrors = 0;
+    let recognitionNoSpeechWarningShown = false;
     let transcriptPaused = false;
     let recognitionErrorShown = false;
     let usingOnDevice = false;
@@ -780,6 +782,8 @@
       if (isAppClosing || event.target !== recognition) return;
       recognitionGotResult = true;
       recognitionNetworkErrors = 0;
+      recognitionNoSpeechErrors = 0;
+      recognitionNoSpeechWarningShown = false;
       if (recognitionErrorShown) { hideError(); recognitionErrorShown = false; }
       interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -842,6 +846,16 @@
         // 一時的な network エラーは自動再起動で復帰を試みるため、ここでは表示しない。
         // 復帰できない場合のみ onend 側で一時停止メッセージを表示する。
         recognitionNetworkErrors++;
+      } else if (event.error === 'no-speech') {
+        // Chrome では、MediaRecorder は録れているのに SpeechRecognition だけが
+        // 別の無音デバイスを聴いて no-speech を返すことがある。
+        // 録音自体は継続し、2回続いた時だけ利用者に確認手順を出す。
+        recognitionNoSpeechErrors++;
+        if (recognitionNoSpeechErrors >= 2 && !recognitionNoSpeechWarningShown) {
+          recognitionNoSpeechWarningShown = true;
+          recognitionErrorShown = true;
+          showError('音声認識側で音声が検出されていません。録音レビューを再生して声が入っている場合は、Chrome または Windows の既定マイクが音声認識側とずれている可能性があります。Windows の「録音」デバイスと Chrome のマイク設定で、実際に使うマイクを既定にしてから Chrome を完全に再起動してください。録音と保存は継続しています。');
+        }
       } else if (usingOnDevice && (event.error === 'language-not-supported' || event.error === 'service-not-allowed')) {
         // オンデバイス認識が利用できない場合はクラウド認識へ切り替える
         fallBackToCloudRecognition('on-device recognition error: ' + event.error);
@@ -1080,6 +1094,41 @@
       }
     }
 
+    async function startRecognitionForCurrentSession() {
+      if (!recognition) {
+        pendingReady.recognition = true;
+        return;
+      }
+
+      await configureRecognitionEngine();
+      try {
+        recognition.start();
+      } catch (e) {
+        // 前回のセッションが終了せず残っている場合（InvalidStateError）はインスタンスを作り直す
+        console.warn('Recognition start failed; recreating the recognition instance.', e);
+        discardRecognition(recognition);
+        recognition = createRecognition();
+        await configureRecognitionEngine();
+        try {
+          recognition.start();
+        } catch (e2) {
+          console.warn('Recognition start failed again.', e2);
+          pendingReady.recognition = true;
+          return;
+        }
+      }
+
+      clearTimeout(onDeviceWatchdogTimer);
+      if (usingOnDevice) {
+        // オンデバイス認識が結果を一切返さない場合はクラウドへ自動切替
+        onDeviceWatchdogTimer = setTimeout(() => {
+          if (isRecording && usingOnDevice && !recognitionGotResult) {
+            fallBackToCloudRecognition('no results within 8s');
+          }
+        }, 8000);
+      }
+    }
+
     startBtn.addEventListener('click', async () => {
       if (isAppClosing) return;
       if (stopRequested) {
@@ -1093,36 +1142,11 @@
       }
       hideError();
       recognitionNetworkErrors = 0;
+      recognitionNoSpeechErrors = 0;
+      recognitionNoSpeechWarningShown = false;
       transcriptPaused = false;
       recognitionErrorShown = false;
       recognitionGotResult = false;
-
-      if (recognition) {
-        await configureRecognitionEngine();
-        try {
-          recognition.start();
-        } catch (e) {
-          // 前回のセッションが終了せず残っている場合（InvalidStateError）はインスタンスを作り直す
-          console.warn('Recognition start failed; recreating the recognition instance.', e);
-          discardRecognition(recognition);
-          recognition = createRecognition();
-          await configureRecognitionEngine();
-          try {
-            recognition.start();
-          } catch (e2) {
-            console.warn('Recognition start failed again.', e2);
-          }
-        }
-        clearTimeout(onDeviceWatchdogTimer);
-        if (usingOnDevice) {
-          // オンデバイス認識が結果を一切返さない場合はクラウドへ自動切替
-          onDeviceWatchdogTimer = setTimeout(() => {
-            if (isRecording && usingOnDevice && !recognitionGotResult) {
-              fallBackToCloudRecognition('no results within 8s');
-            }
-          }, 8000);
-        }
-      }
 
       try {
         if (!globalAudioStream) {
@@ -1161,11 +1185,14 @@
         startBtn.classList.add('hidden'); startBtn.classList.remove('flex');
         stopBtn.classList.remove('hidden'); stopBtn.classList.add('flex');
         recordingIndicator.classList.remove('hidden');
-        updateMicStatus('recording');
 
         updateTimerUI(); resetLiveStats();
         
+        // 先に録音用マイクを開始してから音声認識を開始する。
+        // Chrome で認識側だけが無音扱いになる事例を減らし、失敗時も録音を継続できるようにする。
         mediaRecorder.start();
+        await startRecognitionForCurrentSession();
+        updateMicStatus('recording');
 
         timerInterval = setInterval(() => {
           if (isAppClosing) return;
@@ -1203,7 +1230,9 @@
         pendingReady.audio = true;
         maybeFinalizeLatestReview();
       }
-      if (recognition) recognition.stop();
+      if (recognition) {
+        try { recognition.stop(); } catch (e) { console.warn('Recognition stop skipped or failed.', e); }
+      }
       
       clearTimeout(onDeviceWatchdogTimer);
       clearInterval(timerInterval);
