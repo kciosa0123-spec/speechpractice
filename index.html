@@ -406,6 +406,7 @@
     let recognitionNetworkErrors = 0;
     let transcriptPaused = false;
     let recognitionErrorShown = false;
+    let usingOnDevice = false;
 
     const CIRCLE_RADIUS = 88;
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -557,7 +558,9 @@
       if (!micStatus || !micStatusText) return;
       micStatus.classList.remove('hidden');
       if (state === 'recording') {
-        micStatusText.textContent = 'Recording now. The microphone is actively recording your speech.';
+        micStatusText.textContent = usingOnDevice
+          ? 'Recording now (on-device recognition). Audio is transcribed on this device.'
+          : 'Recording now. The microphone is actively recording your speech.';
       } else if (state === 'finalizing') {
         micStatusText.textContent = 'Recording stopped. Finalizing the audio and transcript.';
       } else {
@@ -840,6 +843,10 @@
           // 一時的な network エラーは自動再起動で復帰を試みるため、ここでは表示しない。
           // 復帰できない場合のみ onend 側で一時停止メッセージを表示する。
           recognitionNetworkErrors++;
+        } else if (usingOnDevice && (event.error === 'language-not-supported' || event.error === 'service-not-allowed')) {
+          // オンデバイス認識が利用できない場合はクラウドへ切り替え、onend の自動再起動に任せる
+          try { recognition.processLocally = false; } catch (e2) {}
+          usingOnDevice = false;
         }
       };
     } else {
@@ -1003,6 +1010,35 @@
       setFinalizeUiState(false);
     }
 
+    // Chrome 139+ のオンデバイス音声認識が使えるか照会し、エンジンを決定する。
+    // available → オンデバイス / downloadable → 今回はクラウドで開始し裏で言語パック導入 / それ以外 → クラウド
+    async function configureRecognitionEngine() {
+      if (!recognition) return;
+      recognition.lang = langSelect.value;
+      usingOnDevice = false;
+      const supportsOnDevice =
+        'processLocally' in recognition &&
+        typeof SpeechRecognition !== 'undefined' &&
+        typeof SpeechRecognition.available === 'function';
+      if (!supportsOnDevice) return;
+      try {
+        const status = await SpeechRecognition.available({ langs: [recognition.lang], processLocally: true });
+        if (status === 'available') {
+          recognition.processLocally = true;
+          usingOnDevice = true;
+        } else {
+          recognition.processLocally = false;
+          if (status === 'downloadable' && typeof SpeechRecognition.install === 'function') {
+            SpeechRecognition.install({ langs: [recognition.lang], processLocally: true }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('On-device availability check failed; falling back to cloud recognition.', e);
+        try { recognition.processLocally = false; } catch (e2) {}
+        usingOnDevice = false;
+      }
+    }
+
     startBtn.addEventListener('click', async () => {
       if (isAppClosing) return;
       if (stopRequested) {
@@ -1020,7 +1056,7 @@
       recognitionErrorShown = false;
 
       if (recognition) {
-        recognition.lang = langSelect.value;
+        await configureRecognitionEngine();
         try {
           recognition.start();
         } catch (e) {
