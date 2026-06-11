@@ -412,6 +412,8 @@
     let recognitionGotResult = false;
     let onDeviceUnusable = false;
     let onDeviceWatchdogTimer = null;
+    let recognitionStartRetryTimer = null;
+    let recognitionSessionId = 0;
 
     const CIRCLE_RADIUS = 88;
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -689,6 +691,8 @@
       clearTimeout(finalizeTimer);
       clearTimeout(audioFinalizeTimer);
       clearTimeout(onDeviceWatchdogTimer);
+      clearTimeout(recognitionStartRetryTimer);
+      recognitionSessionId++;
       clearInterval(timerInterval);
       revokeCachedAudioUrls();
       stopRequested = false;
@@ -822,11 +826,7 @@
           : Math.min(recognitionNetworkErrors, 4) * 1000;
         setTimeout(() => {
           if (isRecording && !transcriptPaused) {
-            try {
-              recognition.start();
-            } catch (e) {
-              console.warn('Recognition restart skipped or failed.', e);
-            }
+            startRecognitionWithRetry({ configure: true, maxAttempts: 3 });
           }
         }, restartDelay);
         return;
@@ -881,9 +881,55 @@
       try { rec.abort(); } catch (e) {}
     }
 
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function startRecognitionWithRetry({ forceCloud = false, configure = true, maxAttempts = 5, initialDelay = 0 } = {}) {
+      const sessionId = recognitionSessionId;
+      clearTimeout(recognitionStartRetryTimer);
+      if (initialDelay > 0) await wait(initialDelay);
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (isAppClosing || !isRecording || sessionId !== recognitionSessionId) return false;
+        if (!recognition) recognition = createRecognition();
+
+        try {
+          recognition.lang = langSelect.value;
+          if (forceCloud) {
+            onDeviceUnusable = true;
+            usingOnDevice = false;
+            try { recognition.processLocally = false; } catch (e) {}
+          } else if (configure) {
+            await configureRecognitionEngine();
+          }
+
+          recognition.start();
+          return true;
+        } catch (e) {
+          console.warn(attempt === 0
+            ? 'Recognition start failed; recreating the recognition instance.'
+            : `Recognition start retry ${attempt + 1} failed.`, e);
+
+          discardRecognition(recognition);
+          recognition = createRecognition();
+
+          if (attempt < maxAttempts - 1) {
+            await wait(Math.min(1500, 300 * (attempt + 1)));
+          }
+        }
+      }
+
+      console.warn('Speech recognition could not be started after retries. Recording will continue without live transcription.');
+      transcriptPaused = true;
+      recognitionErrorShown = true;
+      showError('文字起こしを開始できませんでした。録音と保存は継続しています。Chrome で繰り返し起きる場合は、Chrome を完全に再起動するか、Edge を使用してください。');
+      return false;
+    }
+
     // オンデバイス認識が結果もエラーも返さず固まる事例への対処：
     // 認識インスタンスを作り直してクラウド認識へ切り替える（以降このページではクラウド固定）
-    function fallBackToCloudRecognition(reason) {
+    async function fallBackToCloudRecognition(reason) {
       console.warn('Falling back to cloud recognition:', reason || 'unspecified');
       onDeviceUnusable = true;
       usingOnDevice = false;
@@ -892,8 +938,10 @@
       recognition = createRecognition();
       try { recognition.processLocally = false; } catch (e) {}
       if (isRecording) {
-        try { recognition.start(); } catch (e) { console.warn('Cloud fallback start failed.', e); }
         updateMicStatus('recording');
+        // Chrome では abort() 直後に新しい start() を呼ぶと、内部ロックが残って
+        // InvalidStateError になることがあるため、少し待ってから複数回リトライする。
+        await startRecognitionWithRetry({ forceCloud: true, configure: false, maxAttempts: 6, initialDelay: 500 });
       }
     }
 
@@ -1046,6 +1094,8 @@
       clearTimeout(finalizeTimer);
       clearTimeout(audioFinalizeTimer);
       clearTimeout(onDeviceWatchdogTimer);
+      clearTimeout(recognitionStartRetryTimer);
+      recognitionSessionId++;
       clearInterval(timerInterval);
       recordingStartTime = null;
       lastSessionDuration = 0;
@@ -1100,22 +1150,10 @@
         return;
       }
 
-      await configureRecognitionEngine();
-      try {
-        recognition.start();
-      } catch (e) {
-        // 前回のセッションが終了せず残っている場合（InvalidStateError）はインスタンスを作り直す
-        console.warn('Recognition start failed; recreating the recognition instance.', e);
-        discardRecognition(recognition);
-        recognition = createRecognition();
-        await configureRecognitionEngine();
-        try {
-          recognition.start();
-        } catch (e2) {
-          console.warn('Recognition start failed again.', e2);
-          pendingReady.recognition = true;
-          return;
-        }
+      const started = await startRecognitionWithRetry({ configure: true, maxAttempts: 5 });
+      if (!started) {
+        pendingReady.recognition = true;
+        return;
       }
 
       clearTimeout(onDeviceWatchdogTimer);
@@ -1141,6 +1179,8 @@
         clearLatestReview();
       }
       hideError();
+      clearTimeout(recognitionStartRetryTimer);
+      recognitionSessionId++;
       recognitionNetworkErrors = 0;
       recognitionNoSpeechErrors = 0;
       recognitionNoSpeechWarningShown = false;
@@ -1230,6 +1270,8 @@
         pendingReady.audio = true;
         maybeFinalizeLatestReview();
       }
+      clearTimeout(recognitionStartRetryTimer);
+      recognitionSessionId++;
       if (recognition) {
         try { recognition.stop(); } catch (e) { console.warn('Recognition stop skipped or failed.', e); }
       }
