@@ -410,15 +410,19 @@
     let recognitionErrorShown = false;
     let usingOnDevice = false;
     let recognitionGotResult = false;
-    // v12.8 safety default: start with cloud recognition.
+    // v12.9 safety default: start with cloud recognition.
     // Chrome can report on-device recognition as available while the session silently hangs;
     // add ?local=1 to the URL only when explicitly testing on-device recognition again.
     let onDeviceUnusable = new URLSearchParams(window.location.search).get('local') !== '1';
     let onDeviceWatchdogTimer = null;
     let recognitionStartRetryTimer = null;
     let recognitionSessionId = 0;
+    let recognitionNoResultWatchdogTimer = null;
+    let recognitionNoResultRestarts = 0;
+    const RECOGNITION_NO_RESULT_TIMEOUT_MS = 10000;
+    const MAX_RECOGNITION_NO_RESULT_RESTARTS = 2;
 
-    console.info('English Speech Practice Education v12.8 loaded. On-device recognition is opt-in via ?local=1.');
+    console.info('English Speech Practice Education v12.9 loaded. Cloud recognition watchdog enabled. On-device recognition is opt-in via ?local=1.');
 
     const CIRCLE_RADIUS = 88;
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
@@ -790,6 +794,8 @@
     function handleRecognitionResult(event) {
       if (isAppClosing || event.target !== recognition) return;
       recognitionGotResult = true;
+      recognitionNoResultRestarts = 0;
+      clearTimeout(recognitionNoResultWatchdogTimer);
       recognitionNetworkErrors = 0;
       recognitionNoSpeechErrors = 0;
       recognitionNoSpeechWarningShown = false;
@@ -890,6 +896,34 @@
       return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    function armRecognitionNoResultWatchdog() {
+      clearTimeout(recognitionNoResultWatchdogTimer);
+      const sessionId = recognitionSessionId;
+      recognitionNoResultWatchdogTimer = setTimeout(async () => {
+        if (isAppClosing || !isRecording || transcriptPaused || sessionId !== recognitionSessionId || recognitionGotResult) return;
+
+        if (usingOnDevice) {
+          await fallBackToCloudRecognition('no results within 8s');
+          return;
+        }
+
+        if (recognitionNoResultRestarts < MAX_RECOGNITION_NO_RESULT_RESTARTS) {
+          recognitionNoResultRestarts++;
+          console.warn(`Cloud recognition produced no transcript within ${RECOGNITION_NO_RESULT_TIMEOUT_MS / 1000}s. Restarting recognition (${recognitionNoResultRestarts}/${MAX_RECOGNITION_NO_RESULT_RESTARTS}).`);
+          discardRecognition(recognition);
+          recognition = createRecognition();
+          try { recognition.processLocally = false; } catch (e) {}
+          await startRecognitionWithRetry({ forceCloud: true, configure: false, maxAttempts: 4, initialDelay: 800 });
+          return;
+        }
+
+        transcriptPaused = true;
+        recognitionErrorShown = true;
+        clearTimeout(recognitionNoResultWatchdogTimer);
+        showError('録音音声は保存されていますが、Chrome の音声認識サービスから文字起こし結果が返ってきません。Chrome を完全終了して再起動するか、Edge を使用してください。録音と保存は継続しています。');
+      }, usingOnDevice ? 8000 : RECOGNITION_NO_RESULT_TIMEOUT_MS);
+    }
+
     async function startRecognitionWithRetry({ forceCloud = false, configure = true, maxAttempts = 5, initialDelay = 0 } = {}) {
       const sessionId = recognitionSessionId;
       clearTimeout(recognitionStartRetryTimer);
@@ -910,6 +944,8 @@
           }
 
           recognition.start();
+          console.info(`Speech recognition started (${usingOnDevice ? 'on-device' : 'cloud'}).`);
+          armRecognitionNoResultWatchdog();
           return true;
         } catch (e) {
           console.warn(attempt === 0
@@ -1161,15 +1197,8 @@
         return;
       }
 
-      clearTimeout(onDeviceWatchdogTimer);
-      if (usingOnDevice) {
-        // オンデバイス認識が結果を一切返さない場合はクラウドへ自動切替
-        onDeviceWatchdogTimer = setTimeout(() => {
-          if (isRecording && usingOnDevice && !recognitionGotResult) {
-            fallBackToCloudRecognition('no results within 8s');
-          }
-        }, 8000);
-      }
+      // v12.9: startRecognitionWithRetry() arms a unified watchdog for both
+      // on-device and cloud recognition no-result failures.
     }
 
     startBtn.addEventListener('click', async () => {
@@ -1192,6 +1221,8 @@
       transcriptPaused = false;
       recognitionErrorShown = false;
       recognitionGotResult = false;
+      recognitionNoResultRestarts = 0;
+      clearTimeout(recognitionNoResultWatchdogTimer);
 
       try {
         if (!globalAudioStream) {
@@ -1253,6 +1284,7 @@
         console.error('Error accessing microphone:', err);
         rollbackRecordingStartFailure();
         showError('マイクを使用できません。システムやブラウザのマイク許可設定を確認してください。');
+        clearTimeout(recognitionNoResultWatchdogTimer);
         if (recognition) {
           try { recognition.stop(); } catch (e) {}
         }
