@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>English Speech Practice - Education Edition</title>
+  <title>English Speech Practice - Home Practice Edition</title>
 
 
   <style>
@@ -102,22 +102,27 @@
       <span id="mic-status-text">Microphone connected. Not recording. Recording starts only after you press “Start Speaking.”</span>
     </div>
 
+    <div id="storage-notice" class="mb-6 bg-amber-50 border border-amber-100 text-amber-800 px-4 py-3 rounded-lg text-sm leading-relaxed">
+      <strong>大切な注意:</strong> 録音記録と音声は、この端末のこのブラウザ内に保存されます。端末を変えたり、ブラウザデータを削除したり、ストレージ容量が不足したりすると記録が失われることがあります。定期的に <strong>Save Practice Data</strong> でバックアップしてください。
+      <div id="last-backup-display" class="mt-2 text-xs text-amber-800">最終バックアップ: まだありません</div>
+    </div>
+
     <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mb-8 border border-gray-100">
       
       <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
         <div class="md:col-span-3">
           <label class="block text-sm font-semibold text-gray-700 mb-2">Student Number</label>
-          <input id="student-number" type="text" placeholder="e.g. 12345"
+          <input id="student-number" type="text" autocomplete="off" placeholder="e.g. 12345"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         <div class="md:col-span-4">
           <label class="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
-          <input id="student-name" type="text" placeholder="e.g. Taro Yamada"
+          <input id="student-name" type="text" autocomplete="name" placeholder="e.g. Taro Yamada"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         <div class="md:col-span-5">
           <label class="block text-sm font-semibold text-gray-700 mb-2">Topic / Prompt</label>
-          <input id="speech-topic" type="text" placeholder="e.g. My favorite place in Kyoto"
+          <input id="speech-topic" type="text" autocomplete="off" placeholder="e.g. My favorite place in Kyoto"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
       </div>
@@ -373,6 +378,9 @@
     const AUDIO_DB_VERSION = 1;
     const ONDEVICE_VERDICT_KEY = 'speechPracticeOnDeviceVerdict_v1';
     const ONDEVICE_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // 7日後にオンデバイスを再試行
+    const BACKUP_REMINDER_KEY = 'speechPracticeBackupReminderCount_v1';
+    const LAST_BACKUP_AT_KEY = 'speechPracticeLastBackupAt_v1';
+    const BACKUP_REMINDER_INTERVAL = 3;
 
     let timeLimit = 60;
     let timeLeft = 60;
@@ -419,7 +427,7 @@
     const CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS;
 
     // DOM Elements
-    const studentNumberInput = document.getElementById('student-number'); // ★追加
+    const studentNumberInput = document.getElementById('student-number');
     const timeSelect = document.getElementById('time-select');
     const targetWordsInput = document.getElementById('target-words');
     const langSelect = document.getElementById('lang-select');
@@ -443,6 +451,7 @@
     const errorText = document.getElementById('error-text');
     const micStatus = document.getElementById('mic-status');
     const micStatusText = document.getElementById('mic-status-text');
+    const lastBackupDisplay = document.getElementById('last-backup-display');
     const liveTranscriptText = document.getElementById('live-transcript-text');
     const emptyState = document.getElementById('empty-state');
     const recordingsList = document.getElementById('recordings-list');
@@ -856,8 +865,8 @@
           showError('マイクから音声が検出されていません。話しているのに文字が出ない場合は、パソコンのマイク設定（入力デバイスの選択）やセキュリティソフトの設定をご確認ください。録音と保存はそのまま行えます。');
         }
       } else if (usingOnDevice && (event.error === 'language-not-supported' || event.error === 'service-not-allowed')) {
-        // オンデバイス認識が利用できない場合はクラウド認識へ切り替える
-        fallBackToCloudRecognition('on-device recognition error: ' + event.error);
+        // 明確な非対応エラーだけを、この端末ではオンデバイス認識不可として一定期間記録する
+        fallBackToCloudRecognition('on-device recognition error: ' + event.error, { rememberUnusable: true });
       }
     }
 
@@ -880,12 +889,17 @@
       try { rec.abort(); } catch (e) {}
     }
 
-    // オンデバイス認識が結果もエラーも返さず固まる事例への対処：
-    // 認識インスタンスを作り直してクラウド認識へ切り替える（以降このページではクラウド固定）
-    function fallBackToCloudRecognition(reason) {
+    // オンデバイス認識が結果もエラーも返さず固まる事例への対処。
+    // 無音・考え込みによるwatchdog切替では永続判定せず、そのセッション内だけクラウドへ切り替える。
+    function fallBackToCloudRecognition(reason, options = {}) {
+      const { rememberUnusable = false } = options;
       console.warn('Falling back to cloud recognition:', reason || 'unspecified');
-      onDeviceUnusable = true;
-      saveOnDeviceVerdict();
+
+      if (rememberUnusable) {
+        onDeviceUnusable = true;
+        saveOnDeviceVerdict();
+      }
+
       usingOnDevice = false;
       clearTimeout(onDeviceWatchdogTimer);
       discardRecognition(recognition);
@@ -1038,6 +1052,66 @@
       }
     }
 
+    async function requestPersistentStorage() {
+      if (!navigator.storage || typeof navigator.storage.persist !== 'function') return false;
+      try {
+        if (typeof navigator.storage.persisted === 'function') {
+          const alreadyPersisted = await navigator.storage.persisted();
+          if (alreadyPersisted) return true;
+        }
+        return await navigator.storage.persist();
+      } catch (e) {
+        console.warn('Persistent storage request failed.', e);
+        return false;
+      }
+    }
+
+    function markBackupPromptShown() {
+      try {
+        localStorage.setItem(BACKUP_REMINDER_KEY, String(recordings.length));
+      } catch (e) {}
+    }
+
+    function updateLastBackupDisplay() {
+      if (!lastBackupDisplay) return;
+      try {
+        const raw = localStorage.getItem(LAST_BACKUP_AT_KEY);
+        if (!raw) {
+          lastBackupDisplay.textContent = '最終バックアップ: まだありません';
+          return;
+        }
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) {
+          lastBackupDisplay.textContent = '最終バックアップ: 確認できません';
+          return;
+        }
+        lastBackupDisplay.textContent = `最終バックアップ: ${date.toLocaleString()}`;
+      } catch (e) {
+        lastBackupDisplay.textContent = '最終バックアップ: 確認できません';
+      }
+    }
+
+    function markBackupExported() {
+      try {
+        localStorage.setItem(BACKUP_REMINDER_KEY, String(recordings.length));
+        localStorage.setItem(LAST_BACKUP_AT_KEY, new Date().toISOString());
+      } catch (e) {}
+      updateLastBackupDisplay();
+    }
+
+    function maybePromptBackup() {
+      if (recordings.length < BACKUP_REMINDER_INTERVAL) return;
+      try {
+        const lastPromptedCount = Number(localStorage.getItem(BACKUP_REMINDER_KEY) || 0);
+        if (!Number.isFinite(lastPromptedCount) || recordings.length - lastPromptedCount >= BACKUP_REMINDER_INTERVAL) {
+          markBackupPromptShown();
+          alert('記録が増えてきました。家庭での自主練習データはこのブラウザ内にのみ保存されます。定期的に「Save Practice Data」でバックアップしてください。');
+        }
+      } catch (e) {
+        console.warn('Could not evaluate backup reminder state.', e);
+      }
+    }
+
     function rollbackRecordingStartFailure() {
       isRecording = false;
       stopRequested = false;
@@ -1106,7 +1180,10 @@
           usingOnDevice = true;
         } else {
           recognition.processLocally = false;
-          if (status === 'downloadable' && typeof SpeechRecognition.install === 'function') {
+          if (status === 'unavailable') {
+            onDeviceUnusable = true;
+            saveOnDeviceVerdict();
+          } else if (status === 'downloadable' && typeof SpeechRecognition.install === 'function') {
             SpeechRecognition.install({ langs: [recognition.lang], processLocally: true }).catch(() => {});
           }
         }
@@ -1136,10 +1213,13 @@
       noSpeechStreak = 0;
       silenceHintShown = false;
 
+      let recognitionStarted = false;
       if (recognition) {
         await configureRecognitionEngine();
+        clearTimeout(onDeviceWatchdogTimer);
         try {
           recognition.start();
+          recognitionStarted = true;
         } catch (e) {
           // 前回のセッションが終了せず残っている場合（InvalidStateError）はインスタンスを作り直す
           console.info('Recognition instance was busy; recreated and retried.', e && e.name);
@@ -1148,18 +1228,10 @@
           await configureRecognitionEngine();
           try {
             recognition.start();
+            recognitionStarted = true;
           } catch (e2) {
             console.warn('Recognition start failed again.', e2);
           }
-        }
-        clearTimeout(onDeviceWatchdogTimer);
-        if (usingOnDevice) {
-          // オンデバイス認識が結果を一切返さない場合はクラウドへ自動切替
-          onDeviceWatchdogTimer = setTimeout(() => {
-            if (isRecording && usingOnDevice && !recognitionGotResult) {
-              fallBackToCloudRecognition('no results within 5s');
-            }
-          }, 5000);
         }
       }
 
@@ -1204,7 +1276,22 @@
 
         updateTimerUI(); resetLiveStats();
         
-        mediaRecorder.start();
+        mediaRecorder.start(1000);
+
+        if (recognition && !recognitionStarted) {
+          recognitionErrorShown = true;
+          showError('文字起こしを開始できませんでした。録音は継続しています。録音後に音声を聞き直して保存できます。ブラウザを再読み込みするか、Chrome / Edge のマイク許可設定を確認してください。');
+        }
+
+        if (usingOnDevice && recognitionStarted) {
+          // 録音状態が確定してから、オンデバイス認識の無応答を監視する
+          clearTimeout(onDeviceWatchdogTimer);
+          onDeviceWatchdogTimer = setTimeout(() => {
+            if (isRecording && usingOnDevice && !recognitionGotResult) {
+              fallBackToCloudRecognition('no results within 5s', { rememberUnusable: false });
+            }
+          }, 5000);
+        }
 
         timerInterval = setInterval(() => {
           if (isAppClosing) return;
@@ -1242,7 +1329,11 @@
         pendingReady.audio = true;
         maybeFinalizeLatestReview();
       }
-      if (recognition) recognition.stop();
+      try {
+        if (recognition) recognition.stop();
+      } catch (e) {
+        console.warn('Recognition stop skipped or failed.', e);
+      }
       
       clearTimeout(onDeviceWatchdogTimer);
       clearInterval(timerInterval);
@@ -1264,10 +1355,14 @@
 
     copyBtn.addEventListener('click', async () => {
       const text = getCurrentTranscript();
-      if (text) {
+      if (!text) return;
+      try {
         await navigator.clipboard.writeText(text);
         copyBtn.textContent = 'Copied!';
         setTimeout(() => { copyBtn.innerHTML = '<i data-lucide="copy" class="mr-2 w-5 h-5"></i> Copy'; lucide.createIcons(); }, 1200);
+      } catch (e) {
+        console.warn('Clipboard copy failed.', e);
+        alert('自動コピーできませんでした。Transcript を手動で選択してコピーしてください。');
       }
     });
 
@@ -1283,9 +1378,11 @@
 
     saveReviewBtn.addEventListener('click', async () => {
       if (stopRequested || !latestDraftRecording) return;
+      setButtonDisabled(saveReviewBtn, true);
+
       const finalRecord = {
         ...latestDraftRecording,
-        studentNumber: studentNumberInput.value.trim(), // ★追加
+        studentNumber: studentNumberInput.value.trim(),
         studentName: studentNameInput.value.trim(),
         topic: speechTopicInput.value.trim(),
         targetWords: getCurrentTarget(),
@@ -1297,24 +1394,74 @@
         },
         note: reflectionNote.value.trim()
       };
-      try {
-        if (finalRecord.hasAudio && latestReviewAudioBlob && latestReviewAudioBlob.size > 0) {
+
+      let audioSaveFailed = false;
+      let audioSaved = false;
+
+      if (finalRecord.hasAudio && latestReviewAudioBlob && latestReviewAudioBlob.size > 0) {
+        try {
           await saveAudioBlob(finalRecord.audioId, latestReviewAudioBlob);
-        } else {
+          audioSaved = true;
+        } catch (e) {
+          console.warn('Audio save failed. Saving text record without audio.', e);
           finalRecord.hasAudio = false;
+          audioSaveFailed = true;
         }
+      } else {
+        finalRecord.hasAudio = false;
+      }
+
+      try {
         recordings.unshift(finalRecord);
         saveHistoryToLocalStorage();
+        await requestPersistentStorage();
         renderRecordings();
         clearLatestReview();
-      } catch (e) { alert('Could not save the review audio.'); }
+        maybePromptBackup();
+        if (audioSaveFailed) {
+          alert('音声は保存できませんでしたが、文字起こし・自己評価・メモは保存しました。');
+        }
+      } catch (e) {
+        recordings = recordings.filter(r => normalizeAudioId(r.id) !== normalizeAudioId(finalRecord.id));
+        if (audioSaved) {
+          try {
+            await deleteAudioBlob(finalRecord.audioId);
+            invalidateAudioUrl(finalRecord.audioId);
+          } catch (cleanupError) {
+            console.warn('Could not delete orphan audio after record save failure.', cleanupError);
+          }
+        }
+        console.error('Could not save the review record.', e);
+        alert('録音レビューを保存できませんでした。ブラウザの保存容量や設定を確認してください。');
+        setButtonDisabled(saveReviewBtn, false);
+      }
     });
 
     discardLatestBtn.addEventListener('click', () => { if (!stopRequested) clearLatestReview(); });
     clearHistoryBtn.addEventListener('click', async () => {
-      if (confirm('保存履歴をすべて削除しますか？')) {
-        recordings = []; saveHistoryToLocalStorage();
-        await clearAllAudioBlobs(); revokeCachedAudioUrls(); renderRecordings();
+      if (!confirm('保存履歴をすべて削除しますか？')) return;
+
+      const previousRecordings = recordings.slice();
+      recordings = [];
+
+      try {
+        saveHistoryToLocalStorage();
+      } catch (e) {
+        recordings = previousRecordings;
+        console.error('Could not clear saved history.', e);
+        alert('保存履歴を削除できませんでした。ブラウザの保存設定を確認してください。');
+        renderRecordings();
+        return;
+      }
+
+      try {
+        await clearAllAudioBlobs();
+        revokeCachedAudioUrls();
+      } catch (e) {
+        console.warn('Could not clear all audio blobs.', e);
+        alert('履歴は削除しましたが、一部の音声データ削除に失敗した可能性があります。');
+      } finally {
+        renderRecordings();
       }
     });
 
@@ -1350,24 +1497,52 @@
     }
 
     async function deleteRecordingById(id) {
+      const recordId = normalizeAudioId(id);
+      const rec = recordings.find(r => normalizeAudioId(r.id) === recordId);
+      if (!rec) return;
+      if (!confirm('この録音記録を削除しますか？この操作は元に戻せません。')) return;
+
+      const previousRecordings = recordings.slice();
+      recordings = recordings.filter(r => normalizeAudioId(r.id) !== recordId);
+
       try {
-        const recordId = normalizeAudioId(id);
-        const rec = recordings.find(r => normalizeAudioId(r.id) === recordId);
-        if (!rec) return;
-        if (!confirm('この録音記録を削除しますか？この操作は元に戻せません。')) return;
-        recordings = recordings.filter(r => normalizeAudioId(r.id) !== recordId);
         saveHistoryToLocalStorage();
-        if (rec?.hasAudio && rec.audioId != null) {
+      } catch (e) {
+        recordings = previousRecordings;
+        console.error('Could not delete the recording record.', e);
+        alert('録音記録を削除できませんでした。ブラウザの保存設定を確認してください。');
+        renderRecordings();
+        return;
+      }
+
+      let audioDeleteFailed = false;
+      if (rec?.hasAudio && rec.audioId != null) {
+        try {
           await deleteAudioBlob(rec.audioId);
+        } catch (e) {
+          audioDeleteFailed = true;
+          console.warn('Recording record deleted, but audio deletion failed.', e);
+        } finally {
           invalidateAudioUrl(rec.audioId);
         }
-        renderRecordings();
-      } catch (e) { alert('Could not delete the recording.'); }
+      }
+
+      renderRecordings();
+      if (audioDeleteFailed) {
+        alert('録音記録は削除しましたが、音声データの削除に失敗した可能性があります。');
+      }
     }
 
     async function copyHistoryTranscriptById(id) {
       const rec = recordings.find(r => normalizeAudioId(r.id) === normalizeAudioId(id));
-      if (rec?.transcript) { await navigator.clipboard.writeText(rec.transcript); alert('Transcript copied.'); }
+      if (!rec?.transcript) return;
+      try {
+        await navigator.clipboard.writeText(rec.transcript);
+        alert('Transcript copied.');
+      } catch (e) {
+        console.warn('Clipboard copy failed.', e);
+        alert('自動コピーできませんでした。Transcript を手動で選択してコピーしてください。');
+      }
     }
 
     function requestRenderRecordings() {
@@ -1412,7 +1587,7 @@
       }
     }
 
-    // CSV出力機能 ★修正: Student Numberを先頭付近に追加
+    // CSV出力機能
     function escapeCsv(value) {
       let str = String(value ?? '');
       if (/^[=+\-@]/.test(str.trimStart())) {
@@ -1433,12 +1608,25 @@
         'Fluency', 'Pronunciation', 'Vocabulary', 'Grammar', 'Note', 'Transcript'
       ];
       const rows = recordings.map(rec => [
-        rec.date, escapeCsv(rec.studentNumber || ''), escapeCsv(rec.studentName || ''), escapeCsv(rec.topic || ''), rec.duration,
-        rec.words, rec.wpm, rec.targetWords || '', rec.language || '', rec.selfScore || '',
-        rec.hasAudio ? 'Yes' : 'No', rec.scores?.content ?? '', rec.scores?.fluency ?? '',
-        rec.scores?.pronunciation ?? '', rec.scores?.vocabulary ?? '', rec.scores?.grammar ?? '',
-        escapeCsv(rec.note || ''), escapeCsv(rec.transcript || '')
-      ]);
+        rec.date,
+        rec.studentNumber || '',
+        rec.studentName || '',
+        rec.topic || '',
+        rec.duration,
+        rec.words,
+        rec.wpm,
+        rec.targetWords || '',
+        rec.language || '',
+        rec.selfScore || '',
+        rec.hasAudio ? 'Yes' : 'No',
+        rec.scores?.content ?? '',
+        rec.scores?.fluency ?? '',
+        rec.scores?.pronunciation ?? '',
+        rec.scores?.vocabulary ?? '',
+        rec.scores?.grammar ?? '',
+        rec.note || '',
+        rec.transcript || ''
+      ].map(escapeCsv));
       const bom = '\uFEFF';
       const csvContent = bom + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1468,7 +1656,7 @@
           return copy;
         }));
         const payload = {
-          app: 'English Speech Practice - Education Edition',
+          app: 'English Speech Practice - Home Practice Edition',
           schemaVersion: 2,
           exportedAt: new Date().toISOString(),
           records: exportData
@@ -1480,6 +1668,7 @@
         a.download = 'speech_practice_saved_data.json';
         a.click();
         URL.revokeObjectURL(url);
+        markBackupExported();
       } catch (e) {
         console.error(e);
         alert('Could not prepare the practice data file.');
@@ -1536,6 +1725,8 @@
             return;
           }
 
+          await requestPersistentStorage();
+
           const normalized = [];
           const audioItems = [];
           for (let i = 0; i < sourceRecords.length; i++) {
@@ -1588,7 +1779,7 @@
       let view = recordings.filter(rec => !query || 
         (rec.studentName || '').toLowerCase().includes(query) || (rec.topic || '').toLowerCase().includes(query) || 
         (rec.transcript || '').toLowerCase().includes(query) || (rec.note || '').toLowerCase().includes(query) ||
-        (rec.studentNumber || '').toLowerCase().includes(query) // ★追加: 学籍番号でも検索可能に
+        (rec.studentNumber || '').toLowerCase().includes(query)
       );
       
       const sortValue = sortSelect.value;
@@ -1617,7 +1808,7 @@
           </div>
         ` : `<div class="bg-gray-50 border border-gray-200 rounded-lg p-3"><div class="text-sm text-gray-400 italic">No audio saved</div></div>`;
         
-        // ★追加: 名前と番号の表示を結合
+        // 名前と学籍番号をまとめて表示する。
         const sNumHtml = rec.studentNumber ? escapeHtml(rec.studentNumber) : '';
         const sNameHtml = rec.studentName ? escapeHtml(rec.studentName) : '-';
         const displayNameHtml = sNumHtml 
@@ -1660,6 +1851,7 @@
 
     recordings = loadHistoryFromLocalStorage();
     onDeviceUnusable = loadOnDeviceVerdict();
+    updateLastBackupDisplay();
     updateTimerUI(); resetLiveStats(); updateSelfScoreUI(); renderRecordings();
   </script>
 </body>
