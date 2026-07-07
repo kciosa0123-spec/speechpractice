@@ -93,7 +93,7 @@
       English Speech Practice
     </h1>
 
-    <div id="error-container" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-start">
+    <div id="error-container" role="alert" aria-live="assertive" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-start">
       <i data-lucide="alert-circle" class="mr-2 mt-0.5 flex-shrink-0 w-5 h-5"></i>
       <p id="error-text"></p>
     </div>
@@ -104,6 +104,7 @@
 
     <div id="storage-notice" class="mb-6 bg-amber-50 border border-amber-100 text-amber-800 px-4 py-3 rounded-lg text-sm leading-relaxed">
       <strong>大切な注意:</strong> 録音記録と音声は、この端末のこのブラウザ内に保存されます。端末を変えたり、ブラウザデータを削除したり、ストレージ容量が不足したりすると記録が失われることがあります。定期的に <strong>Save Practice Data</strong> でバックアップしてください。
+      <br>文字起こし機能は Chrome / Edge での利用を推奨します。録音データの保存はローカルですが、端末内音声認識が使えない場合、文字起こし処理はブラウザの音声認識サービスに依存します。
       <div id="last-backup-display" class="mt-2 text-xs text-amber-800">最終バックアップ: まだありません</div>
     </div>
 
@@ -111,17 +112,17 @@
       
       <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
         <div class="md:col-span-3">
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Student Number</label>
+          <label for="student-number" class="block text-sm font-semibold text-gray-700 mb-2">Student Number</label>
           <input id="student-number" type="text" autocomplete="off" placeholder="e.g. 12345"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         <div class="md:col-span-4">
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
+          <label for="student-name" class="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
           <input id="student-name" type="text" autocomplete="name" placeholder="e.g. Taro Yamada"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         <div class="md:col-span-5">
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Topic / Prompt</label>
+          <label for="speech-topic" class="block text-sm font-semibold text-gray-700 mb-2">Topic / Prompt</label>
           <input id="speech-topic" type="text" autocomplete="off" placeholder="e.g. My favorite place in Kyoto"
             class="w-full bg-white border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
@@ -131,7 +132,7 @@
         <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
           <i data-lucide="clock" class="text-gray-500 w-5 h-5"></i>
           <div class="flex-1">
-            <label class="block text-sm text-gray-600 font-medium mb-1">Time Limit</label>
+            <label for="time-select" class="block text-sm text-gray-600 font-medium mb-1">Time Limit</label>
             <select id="time-select" class="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer">
               <option value="30">30 Seconds</option>
               <option value="60" selected>1 Minute</option>
@@ -150,7 +151,7 @@
         <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
           <i data-lucide="target" class="text-gray-500 w-5 h-5"></i>
           <div class="flex-1">
-            <label class="block text-sm text-gray-600 font-medium mb-1">Target Words</label>
+            <label for="target-words" class="block text-sm text-gray-600 font-medium mb-1">Target Words</label>
             <input id="target-words" type="number" min="10" step="10" value="120"
               class="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
           </div>
@@ -159,7 +160,7 @@
         <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
           <i data-lucide="languages" class="text-gray-500 w-5 h-5"></i>
           <div class="flex-1">
-            <label class="block text-sm text-gray-600 font-medium mb-1">Recognition Language</label>
+            <label for="lang-select" class="block text-sm text-gray-600 font-medium mb-1">Recognition Language</label>
             <select id="lang-select" class="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="en-US" selected>English (US)</option>
               <option value="en-GB">English (UK)</option>
@@ -296,31 +297,31 @@
             </h2>
             <div class="space-y-4">
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Content (1-5)</label>
+                <label for="score-content" class="block text-sm font-semibold text-gray-700 mb-1">Content (1-5)</label>
                 <select id="score-content" class="w-full border border-gray-300 rounded-lg py-2 px-3">
                   <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Fluency (1-5)</label>
+                <label for="score-fluency" class="block text-sm font-semibold text-gray-700 mb-1">Fluency (1-5)</label>
                 <select id="score-fluency" class="w-full border border-gray-300 rounded-lg py-2 px-3">
                   <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Pronunciation (1-5)</label>
+                <label for="score-pronunciation" class="block text-sm font-semibold text-gray-700 mb-1">Pronunciation (1-5)</label>
                 <select id="score-pronunciation" class="w-full border border-gray-300 rounded-lg py-2 px-3">
                   <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Vocabulary (1-5)</label>
+                <label for="score-vocabulary" class="block text-sm font-semibold text-gray-700 mb-1">Vocabulary (1-5)</label>
                 <select id="score-vocabulary" class="w-full border border-gray-300 rounded-lg py-2 px-3">
                   <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Grammar (1-5)</label>
+                <label for="score-grammar" class="block text-sm font-semibold text-gray-700 mb-1">Grammar (1-5)</label>
                 <select id="score-grammar" class="w-full border border-gray-300 rounded-lg py-2 px-3">
                   <option value="5">5</option><option value="4">4</option><option value="3" selected>3</option><option value="2">2</option><option value="1">1</option>
                 </select>
@@ -330,7 +331,7 @@
                 <div id="total-score" class="text-3xl font-bold text-indigo-700">15 / 25</div>
               </div>
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1">Reflection / Memo</label>
+                <label for="reflection-note" class="block text-sm font-semibold text-gray-700 mb-1">Reflection / Memo</label>
                 <textarea id="reflection-note" rows="7" placeholder="What went well? What should I improve next time?"
                   class="w-full border border-gray-300 rounded-lg py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
               </div>
@@ -343,12 +344,12 @@
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 mb-6">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="md:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Search Saved Recordings</label>
+          <label for="search-input" class="block text-sm font-semibold text-gray-700 mb-2">Search Saved Recordings</label>
           <input id="search-input" type="text" placeholder="Search by student, topic, transcript, memo..."
             class="w-full border border-gray-300 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Sort</label>
+          <label for="sort-select" class="block text-sm font-semibold text-gray-700 mb-2">Sort</label>
           <select id="sort-select" class="w-full border border-gray-300 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="newest" selected>Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -380,7 +381,11 @@
     const ONDEVICE_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // 7日後にオンデバイスを再試行
     const BACKUP_REMINDER_KEY = 'speechPracticeBackupReminderCount_v1';
     const LAST_BACKUP_AT_KEY = 'speechPracticeLastBackupAt_v1';
+    const PERSISTENCE_WARNING_KEY = 'speechPracticePersistenceWarningShown_v1';
     const BACKUP_REMINDER_INTERVAL = 3;
+    const MAX_IMPORT_FILE_BYTES = 120 * 1024 * 1024; // 120MB
+    const MAX_AUDIO_DATA_URL_CHARS = 60 * 1024 * 1024; // 約60M文字
+    const MAX_IMPORT_RECORDS = 1000;
 
     let timeLimit = 60;
     let timeLeft = 60;
@@ -412,6 +417,7 @@
     const audioUrlCache = new Map();
     let searchDebounceTimer = null;
     let isAppClosing = false;
+    let startInProgress = false;
 
     let recognitionNetworkErrors = 0;
     let transcriptPaused = false;
@@ -584,6 +590,19 @@
       }
     }
 
+    function showStorageWarning(message) {
+      const notice = document.getElementById('storage-notice');
+      if (!notice) return;
+      let warning = document.getElementById('storage-warning-text');
+      if (!warning) {
+        warning = document.createElement('div');
+        warning.id = 'storage-warning-text';
+        warning.className = 'mt-2 text-xs font-semibold text-amber-800';
+        notice.appendChild(warning);
+      }
+      warning.textContent = message;
+    }
+
     function blobToDataUrl(blob) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -693,6 +712,16 @@
       setButtonDisabled(discardLatestBtn, isFinalizing);
     }
 
+    function releaseMicrophone() {
+      try {
+        if (globalAudioStream) {
+          globalAudioStream.getTracks().forEach(track => track.stop());
+          globalAudioStream = null;
+        }
+      } catch (e) {}
+      if (micStatus) micStatus.classList.add('hidden');
+    }
+
     function cleanupAppResources() {
       if (isAppClosing) return;
       isAppClosing = true;
@@ -718,14 +747,25 @@
         }
       } catch (e) {}
 
-      try {
-        if (globalAudioStream) {
-          globalAudioStream.getTracks().forEach(track => track.stop());
-        }
-      } catch (e) {}
+      releaseMicrophone();
     }
 
-    window.addEventListener('beforeunload', cleanupAppResources);
+    window.addEventListener('beforeunload', (e) => {
+      if (isRecording || stopRequested || latestDraftRecording) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      cleanupAppResources();
+    });
+
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) {
+        location.reload();
+      }
+    });
 
     function beginFinalizeReview() {
       stopRequested = true;
@@ -783,7 +823,7 @@
       };
 
       updateLatestReview(pendingAudioUrl, transcript, duration, words, wpm);
-      if (globalAudioStream) updateMicStatus('connected');
+      releaseMicrophone();
       setFinalizeUiState(false);
     }
 
@@ -1066,6 +1106,20 @@
       }
     }
 
+    async function ensurePersistentStorageNotice() {
+      const persisted = await requestPersistentStorage();
+      if (!persisted) {
+        const message = 'このブラウザでは保存保護を確認できませんでした。記録が増えたら、必ず Save Practice Data でバックアップしてください。';
+        showStorageWarning(message);
+        try {
+          if (!localStorage.getItem(PERSISTENCE_WARNING_KEY)) {
+            localStorage.setItem(PERSISTENCE_WARNING_KEY, '1');
+          }
+        } catch (e) {}
+      }
+      return persisted;
+    }
+
     function markBackupPromptShown() {
       try {
         localStorage.setItem(BACKUP_REMINDER_KEY, String(recordings.length));
@@ -1129,7 +1183,7 @@
       startBtn.classList.remove('hidden'); startBtn.classList.add('flex');
       stopBtn.classList.add('hidden'); stopBtn.classList.remove('flex');
       recordingIndicator.classList.add('hidden');
-      if (globalAudioStream) updateMicStatus('connected');
+      releaseMicrophone();
       updateTimerUI();
       updateLiveStats(getCurrentTranscript());
       setFinalizeUiState(false);
@@ -1194,18 +1248,46 @@
       }
     }
 
+    function unlockStartAfterFailedAttempt() {
+      startInProgress = false;
+      if (!isRecording && !stopRequested) {
+        setButtonDisabled(startBtn, false);
+      }
+    }
+
     startBtn.addEventListener('click', async () => {
-      if (isAppClosing) return;
+      if (isAppClosing || isRecording || startInProgress) return;
+      startInProgress = true;
+      setButtonDisabled(startBtn, true);
+
       if (stopRequested) {
         alert('Please wait. The previous transcript is still being finalized.');
+        unlockStartAfterFailedAttempt();
         return;
       }
       if (latestDraftRecording) {
         const discard = confirm('まだ保存されていない録音レビューがあります。破棄して新しく録音しますか？');
-        if (!discard) return;
+        if (!discard) {
+          unlockStartAfterFailedAttempt();
+          return;
+        }
         clearLatestReview();
+        setButtonDisabled(startBtn, true);
       }
       hideError();
+
+      if (typeof MediaRecorder === 'undefined') {
+        showError('このブラウザは録音保存に対応していません。Chrome または Edge を使用してください。');
+        unlockStartAfterFailedAttempt();
+        return;
+      }
+
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        showError('このブラウザではマイクを使用できません。HTTPS環境のChrome / Edgeで開いてください。');
+        unlockStartAfterFailedAttempt();
+        return;
+      }
+
       recognitionNetworkErrors = 0;
       transcriptPaused = false;
       recognitionErrorShown = false;
@@ -1303,9 +1385,11 @@
             stopRecording();
           }
         }, 1000);
+        startInProgress = false;
       } catch (err) {
         console.error('Error accessing microphone:', err);
         rollbackRecordingStartFailure();
+        unlockStartAfterFailedAttempt();
         showError('マイクを使用できません。システムやブラウザのマイク許可設定を確認してください。');
         if (recognition) {
           try { recognition.stop(); } catch (e) {}
@@ -1414,7 +1498,7 @@
       try {
         recordings.unshift(finalRecord);
         saveHistoryToLocalStorage();
-        await requestPersistentStorage();
+        await ensurePersistentStorageNotice();
         renderRecordings();
         clearLatestReview();
         maybePromptBackup();
@@ -1676,11 +1760,23 @@
     }
 
     // JSON読み込み機能
-    function normalizeImportedRecord(rec, index) {
+    function makeUniqueImportedId(candidate, index, seenIds) {
+      let id = createSafeRecordId(candidate, index);
+      while (seenIds.has(id)) {
+        id = createSafeRecordId(`${Date.now()}-${index}-${Math.random().toString(36).slice(2, 10)}`, index);
+      }
+      seenIds.add(id);
+      return id;
+    }
+
+    function normalizeImportedRecord(rec, index, seenIds) {
       if (!rec || typeof rec !== 'object') throw new Error('Invalid record.');
-      const safeId = createSafeRecordId(rec.id, index);
+      const safeId = makeUniqueImportedId(rec.id, index, seenIds);
       const safeAudioId = safeId;
       const hasImportedAudio = typeof rec.audioDataUrl === 'string' && rec.audioDataUrl.startsWith('data:');
+      if (hasImportedAudio && rec.audioDataUrl.length > MAX_AUDIO_DATA_URL_CHARS) {
+        throw new Error('Audio data is too large.');
+      }
       const scores = rec.scores && typeof rec.scores === 'object' ? rec.scores : {};
       return {
         id: safeId,
@@ -1710,6 +1806,12 @@
     }
 
     function importHistoryFromJSON(file) {
+      if (!file) return;
+      if (file.size > MAX_IMPORT_FILE_BYTES) {
+        alert('The practice data file is too large to restore safely. Please split the backup file or use a smaller file.');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async () => {
         let destructivePhaseStarted = false;
@@ -1720,17 +1822,22 @@
             alert('This file is not a valid practice data file.');
             return;
           }
+          if (sourceRecords.length > MAX_IMPORT_RECORDS) {
+            alert('This practice data file contains too many records to restore safely.');
+            return;
+          }
           if (recordings.length > 0 &&
               !confirm('現在の保存データはすべて読み込んだデータに置き換えられます。続行しますか？')) {
             return;
           }
 
-          await requestPersistentStorage();
+          await ensurePersistentStorageNotice();
 
           const normalized = [];
           const audioItems = [];
+          const seenIds = new Set();
           for (let i = 0; i < sourceRecords.length; i++) {
-            const rec = normalizeImportedRecord(sourceRecords[i], i);
+            const rec = normalizeImportedRecord(sourceRecords[i], i, seenIds);
             if (rec.audioDataUrl) {
               const blob = dataUrlToBlob(rec.audioDataUrl);
               if (blob.size > 0) {
@@ -1760,6 +1867,9 @@
             ? 'Could not fully restore the practice data. Some existing audio data may have been changed.'
             : 'Could not load the practice data file. No existing data was changed.');
         }
+      };
+      reader.onerror = () => {
+        alert('Could not read the practice data file.');
       };
       reader.readAsText(file);
     }
